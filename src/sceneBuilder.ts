@@ -26,10 +26,8 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import { Scene } from "@babylonjs/core/scene";
-import havokPhysics from "@babylonjs/havok";
 import { ShadowOnlyMaterial } from "@babylonjs/materials/shadowOnly/shadowOnlyMaterial";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { BvmdLoader } from "babylon-mmd/esm/Loader/Optimized/bvmdLoader";
@@ -39,9 +37,14 @@ import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlay
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
-// for use Ammo.js physics engine, uncomment following line.
-// import ammoPhysics from "babylon-mmd/esm/Runtime/Physics/External/ammo.wasm";
-import { MmdPhysics } from "babylon-mmd/esm/Runtime/Physics/mmdPhysics";
+import { MmdWasmInstanceTypeMPR } from "babylon-mmd/esm/Runtime/Optimized/InstanceType/multiPhysicsRelease";
+import { GetMmdWasmInstance } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmInstance";
+import { MultiPhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/multiPhysicsRuntime";
+import { MotionType } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/motionType";
+import { PhysicsStaticPlaneShape } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/physicsShape";
+import { RigidBody } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBody";
+import { RigidBodyConstructionInfo } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBodyConstructionInfo";
+import { MmdBulletPhysics } from "babylon-mmd/esm/Runtime/Optimized/Physics/mmdBulletPhysics";
 import { MmdPlayerControl } from "babylon-mmd/esm/Runtime/Util/mmdPlayerControl";
 
 import type { ISceneBuilder } from "./baseRuntime";
@@ -119,32 +122,11 @@ export class SceneBuilder implements ISceneBuilder {
         ground.receiveShadows = true;
         ground.parent = mmdRoot;
 
-        // create mmd runtime with physics
-        const mmdRuntime = new MmdRuntime(scene, new MmdPhysics(scene)); // `MmdPhysics` use Havok physics engine for solve rigid body simulation
-        //since Havok is not used by MMD, this may cause some weird behavior on physics simulation.
-
-        // MMD use bullet physics engine for rigid body simulation. and Ammo.js is a port of bullet physics engine to JavaScript.
-        // const mmdRuntime = new MmdRuntime(scene, new MmdAmmoPhysics(scene)); // you can use Ammo.js physics engine for reproduce more similar behavior with MMD.
-
-        // see https://github.com/noname0310/babylon-mmd/pull/38 for more information about MMD Runtime setup
-
-        mmdRuntime.loggingEnabled = true;
-        mmdRuntime.register(scene);
-
         // set audio player
         const audioPlayer = new StreamAudioPlayer(scene);
         audioPlayer.preservesPitch = false;
         // you need to get this file by yourself from https://youtu.be/y__uZETTuL8
         audioPlayer.source = "res/private_test/motion/melancholy_night/melancholy_night.mp3";
-        mmdRuntime.setAudioPlayer(audioPlayer);
-
-        // play before loading. this will cause the audio to play first before all assets are loaded.
-        // playing the audio first can help ease the user's patience
-        mmdRuntime.playAnimation();
-
-        // create youtube like player control
-        const mmdPlayerControl = new MmdPlayerControl(scene, mmdRuntime, audioPlayer);
-        mmdPlayerControl.showPlayerControl();
 
         // show loading screen
         engine.displayLoadingUI();
@@ -160,7 +142,25 @@ export class SceneBuilder implements ISceneBuilder {
         bvmdLoader.loggingEnabled = true;
 
         // fatch assets in parallel by using Promise.all
-        const [mmdAnimation, modelMesh] = await Promise.all([
+        const [[mmdRuntime, physicsRuntime], mmdAnimation, modelMesh] = await Promise.all([
+            (async(): Promise<[MmdRuntime, MultiPhysicsRuntime]> => {
+                updateLoadingText(0, "Loading mmd runtime...");
+                const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeMPR());
+                updateLoadingText(0, "Loading mmd runtime... Done");
+
+                const physicsRuntime = new MultiPhysicsRuntime(wasmInstance);
+                physicsRuntime.setGravity(new Vector3(0, -98, 0));
+                physicsRuntime.register(scene);
+
+                // create mmd runtime with physics
+                // see https://github.com/noname0310/babylon-mmd/pull/38 for more information about MMD Runtime setup
+                const mmdRuntime = new MmdRuntime(scene, new MmdBulletPhysics(physicsRuntime)); // `MmdPhysics` use Bullet physics engine for solve rigid body simulation
+                mmdRuntime.loggingEnabled = true;
+                mmdRuntime.register(scene);
+                mmdRuntime.setAudioPlayer(audioPlayer);
+                mmdRuntime.playAnimation();
+                return [mmdRuntime, physicsRuntime];
+            })(),
             // you need to get this file by yourself from https://www.nicovideo.jp/watch/sm41164308
             bvmdLoader.loadAsync("motion", "res/private_test/motion/melancholy_night/motion.bvmd",
                 (event) => updateLoadingText(0, `Loading motion... ${event.loaded}/${event.total} (${Math.floor(event.loaded * 100 / event.total)}%)`)),
@@ -181,21 +181,15 @@ export class SceneBuilder implements ISceneBuilder {
             ).then(result => {
                 result.addAllToScene();
                 return result.rootNodes[0] as MmdMesh;
-            }),
-            (async(): Promise<void> => {
-                updateLoadingText(2, "Loading physics engine...");
-                const physicsInstance = await havokPhysics();
-                const physicsPlugin = new HavokPlugin(true, physicsInstance);
-                // for Ammo.js physics engine
-                // const physicsInstance = await ammoPhysics();
-                // const physicsPlugin = new MmdAmmoJSPlugin(true, physicsInstance);
-                scene.enablePhysics(new Vector3(0, -98, 0), physicsPlugin);
-                updateLoadingText(2, "Loading physics engine... Done");
-            })()
+            })
         ]);
 
         // hide loading screen
         scene.onAfterRenderObservable.addOnce(() => engine.hideLoadingUI());
+
+        // create youtube like player control
+        const mmdPlayerControl = new MmdPlayerControl(scene, mmdRuntime, audioPlayer);
+        mmdPlayerControl.showPlayerControl();
 
         const cameraAnimationHandle = mmdCamera.createRuntimeAnimation(mmdAnimation);
         mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
@@ -243,12 +237,11 @@ export class SceneBuilder implements ISceneBuilder {
             scene.blockMaterialDirtyMechanism = true;
         });
 
-        // if you want ground collision, uncomment following lines.
-        // const groundRigidBody = new PhysicsBody(ground, PhysicsMotionType.STATIC, true, scene);
-        // groundRigidBody.shape = new PhysicsShapeBox(
-        //     new Vector3(0, -1, 0),
-        //     new Quaternion(),
-        //     new Vector3(100, 2, 100), scene);
+        const info = new RigidBodyConstructionInfo(physicsRuntime.wasmInstance);
+        info.motionType = MotionType.Static;
+        info.shape = new PhysicsStaticPlaneShape(physicsRuntime, new Vector3(0, 1, 0), 0);
+        const groundBody = new RigidBody(physicsRuntime, info);
+        physicsRuntime.addRigidBodyToGlobal(groundBody);
 
         const defaultPipeline = new DefaultRenderingPipeline("default", true, scene, [mmdCamera, camera]);
         defaultPipeline.samples = 4;
