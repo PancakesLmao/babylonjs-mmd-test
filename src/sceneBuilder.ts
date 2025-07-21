@@ -197,9 +197,9 @@ export class SceneBuilder implements ISceneBuilder {
         // hide loading screen
         scene.onAfterRenderObservable.addOnce(() => engine.hideLoadingUI());
 
-        mmdRuntime.setCamera(mmdCamera);
-        mmdCamera.addAnimation(mmdAnimation);
-        mmdCamera.setAnimation("motion");
+        const cameraAnimationHandle = mmdCamera.createRuntimeAnimation(mmdAnimation);
+        mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
+        mmdRuntime.addAnimatable(mmdCamera);
 
         {
             modelMesh.parent = mmdRoot;
@@ -208,8 +208,8 @@ export class SceneBuilder implements ISceneBuilder {
             shadowGenerator.addShadowCaster(modelMesh);
 
             const mmdModel = mmdRuntime.createMmdModel(modelMesh);
-            mmdModel.addAnimation(mmdAnimation);
-            mmdModel.setAnimation("motion");
+            const modelAnimationHandle = mmdModel.createRuntimeAnimation(mmdAnimation);
+            mmdModel.setRuntimeAnimation(modelAnimationHandle);
 
             // make sure directional light follow the model
             const bodyBone = mmdModel.runtimeBones.find((bone) => bone.name === "センター");
