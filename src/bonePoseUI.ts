@@ -225,6 +225,41 @@ export class BonePoseUI {
         vmdContainer.appendChild(vmdLabel);
         vmdContainer.appendChild(vmdFileInput);
 
+        // Add audio loading section
+        const audioLabel = document.createElement("label");
+        audioLabel.textContent = "Load Audio (MP3/WAV):";
+        audioLabel.style.display = "block";
+        audioLabel.style.marginBottom = "8px";
+        audioLabel.style.fontWeight = "bold";
+        audioLabel.style.marginTop = "10px";
+
+        const audioFileInput = document.createElement("input");
+        audioFileInput.type = "file";
+        audioFileInput.accept = ".mp3,.wav,audio/mpeg,audio/wav";
+        audioFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        audioFileInput.addEventListener("change", async(e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadAudioFile(file);
+                        alert("Audio file loaded and synchronized with animation.");
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load audio file:", error);
+                    alert("Failed to load audio file. Check console for details.");
+                }
+            }
+        });
+
+        vmdContainer.appendChild(audioLabel);
+        vmdContainer.appendChild(audioFileInput);
+
         // Animation controls
         const animControlsDiv = document.createElement("div");
         animControlsDiv.id = "vmd-controls";

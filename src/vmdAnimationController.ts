@@ -1,20 +1,24 @@
 import type { Scene } from "@babylonjs/core/scene";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
-import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
+import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
+import type { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import type { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 
 export class VmdAnimationController {
-    private readonly _modelMesh: MmdMesh;
     private readonly _scene: Scene;
     private readonly _mmdRuntime: MmdRuntime;
+    private _mmdCamera: MmdCamera | null = null;
     private _mmdAnimation: any = null;
     private _isPlaying: boolean = false;
     private _playbackSpeed: number = 1.0;
 
-    public constructor(modelMesh: MmdMesh, scene: Scene, mmdRuntime: MmdRuntime) {
-        this._modelMesh = modelMesh;
+    public constructor(scene: Scene, mmdRuntime: MmdRuntime) {
         this._scene = scene;
         this._mmdRuntime = mmdRuntime;
+    }
+
+    public setMmdCamera(mmdCamera: MmdCamera): void {
+        this._mmdCamera = mmdCamera;
     }
 
     public async loadVmdFile(file: File): Promise<void> {
@@ -28,21 +32,52 @@ export class VmdAnimationController {
                 file
             );
 
-            // Get or create MMD model
-            let mmdModel = (this._mmdRuntime as any).models?.[0];
-            if (!mmdModel) {
-                mmdModel = this._mmdRuntime.createMmdModel(this._modelMesh);
+            // Get the MMD model from runtime (first model)
+            const mmdModel = (this._mmdRuntime as any).models?.[0];
+            if (mmdModel) {
+                // Create runtime animation for the model
+                const modelAnimationHandle =
+          mmdModel.createRuntimeAnimation(mmdAnimation);
+                mmdModel.setRuntimeAnimation(modelAnimationHandle);
+                console.log("Model animation applied");
+            } else {
+                console.warn("No MMD model found in runtime");
             }
 
-            // Create runtime animation for the model
-            const animationHandle = mmdModel.createRuntimeAnimation(mmdAnimation);
-            mmdModel.setRuntimeAnimation(animationHandle);
+            // Load camera animation if camera is set and available
+            if (this._mmdCamera && (mmdAnimation as any).cameraAnimation) {
+                const cameraAnimationHandle = this._mmdCamera.createRuntimeAnimation(
+                    (mmdAnimation as any).cameraAnimation
+                );
+                this._mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
+                this._mmdRuntime.addAnimatable(this._mmdCamera);
+                console.log("Camera animation applied");
+            }
 
             this._mmdAnimation = mmdAnimation;
 
             console.log("VMD animation loaded successfully");
         } catch (error) {
             console.error("Failed to load VMD file:", error);
+            throw error;
+        }
+    }
+
+    public async loadAudioFile(file: File): Promise<void> {
+        try {
+            // Create blob URL for audio file
+            const blobUrl = URL.createObjectURL(file);
+
+            // Create StreamAudioPlayer
+            const audioPlayer = new StreamAudioPlayer(this._scene);
+            audioPlayer.source = blobUrl;
+
+            // Set audio player on MmdRuntime for synchronization
+            this._mmdRuntime.setAudioPlayer(audioPlayer);
+
+            console.log("Audio file loaded and synchronized with animation");
+        } catch (error) {
+            console.error("Failed to load audio file:", error);
             throw error;
         }
     }

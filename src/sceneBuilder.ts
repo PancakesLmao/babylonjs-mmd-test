@@ -100,14 +100,17 @@ export class SceneBuilder implements ISceneBuilder {
         for (const mesh of modelMesh.metadata.meshes) mesh.receiveShadows = true;
         shadowGenerator.addShadowCaster(modelMesh);
 
+        // Create MmdModel from the loaded mesh to enable animation playback
+        mmdRuntime.createMmdModel(modelMesh);
+
         // Initialize bone pose UI and camera controller
         const boneController = new BoneController(modelMesh);
         const cameraController = new CameraController(mmdCamera);
         const vmdAnimationController = new VmdAnimationController(
-            modelMesh,
             scene,
             mmdRuntime
         );
+        vmdAnimationController.setMmdCamera(mmdCamera);
         const bonePoseUI = new BonePoseUI(
             boneController,
             cameraController,
