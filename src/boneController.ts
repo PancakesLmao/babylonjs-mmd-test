@@ -220,4 +220,80 @@ export class BoneController {
             }
         }
     }
+
+    public applyVpdPose(
+        vpdBones: {
+      name: string;
+      position: Vector3;
+      rotation: Quaternion;
+    }[]
+    ): void {
+        this._ensureBonesInitialized();
+
+        // Get metadata bones to match by name (Japanese names)
+        const metadata = this._modelMesh.metadata as unknown as {
+      bones?: { name: string; englishName?: string }[];
+    } | null;
+
+        if (!metadata || !Array.isArray(metadata.bones)) {
+            console.warn("No metadata bones available for VPD matching");
+            return;
+        }
+
+        const skeleton =
+      this._modelMesh.skeleton ||
+      (this._modelMesh.metadata as unknown as { skeleton?: unknown })?.skeleton;
+        if (!skeleton) {
+            console.warn("Skeleton not available for applying VPD pose");
+            return;
+        }
+
+        const skeletonBones =
+      (skeleton as unknown as { bones?: unknown[] }).bones || [];
+        let appliedCount = 0;
+
+        for (const vpdBone of vpdBones) {
+            // Find the metadata bone by name (Japanese bone name)
+            const metadataBone = metadata.bones.find((b) => b.name === vpdBone.name);
+
+            if (!metadataBone) {
+                console.warn(`VPD bone not found in model: "${vpdBone.name}"`);
+                continue;
+            }
+
+            // Find the skeleton bone by name
+            const skeletonBone = skeletonBones.find((b) => {
+                const boneObj = b as unknown as { name: string };
+                return boneObj.name === vpdBone.name;
+            });
+
+            if (!skeletonBone) {
+                console.warn(`Skeleton bone not found for: "${vpdBone.name}"`);
+                continue;
+            }
+
+            const boneMod = skeletonBone as unknown as {
+        position: Vector3;
+        setRotationQuaternion(q: Quaternion): void;
+      };
+
+            // Apply position only to IK bones
+            // (IK bones control limb positions via inverse kinematics)
+            // Other bones including センター should not have position applied
+            const boneName = vpdBone.name;
+            const isIKBone = boneName.includes("IK") || boneName.includes("ＩＫ");
+
+            if (isIKBone) {
+                boneMod.position = vpdBone.position.clone();
+            }
+
+            // Apply rotation to all bones
+            boneMod.setRotationQuaternion(vpdBone.rotation.clone());
+            appliedCount += 1;
+
+            console.log(`Applied pose to bone: "${vpdBone.name}"`);
+        }
+
+        console.log(`Applied ${appliedCount} bones from VPD pose`);
+    }
 }

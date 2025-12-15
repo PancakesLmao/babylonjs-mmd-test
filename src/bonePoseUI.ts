@@ -1,4 +1,5 @@
 import type { BoneController } from "./boneController";
+import { VpdLoader } from "./vpdLoader";
 
 export class BonePoseUI {
     private readonly _container: HTMLElement;
@@ -57,6 +58,40 @@ export class BonePoseUI {
             4. Click "Reset All" to reset everything
         `;
         this._container.appendChild(instructions);
+
+        // Add VPD loading section
+        const vpdContainer = document.createElement("div");
+        vpdContainer.style.marginBottom = "15px";
+        vpdContainer.style.paddingBottom = "15px";
+        vpdContainer.style.borderBottom = "1px solid #555";
+
+        const vpdLabel = document.createElement("label");
+        vpdLabel.textContent = "Load VPD Pose:";
+        vpdLabel.style.display = "block";
+        vpdLabel.style.marginBottom = "8px";
+        vpdLabel.style.fontWeight = "bold";
+
+        const vpdFileInput = document.createElement("input");
+        vpdFileInput.type = "file";
+        vpdFileInput.accept = ".vpd";
+        vpdFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        vpdFileInput.addEventListener("change", async(e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+                try {
+                    const vpdBones = await VpdLoader.LoadFromFile(file);
+                    this._boneController.applyVpdPose(vpdBones);
+                } catch (error) {
+                    console.error("Failed to load VPD file:", error);
+                    alert("Failed to load VPD file. Check console for details.");
+                }
+            }
+        });
+
+        vpdContainer.appendChild(vpdLabel);
+        vpdContainer.appendChild(vpdFileInput);
+        this._container.appendChild(vpdContainer);
 
         const bones = this._boneController.getBones();
 
