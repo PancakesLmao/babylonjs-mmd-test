@@ -1,9 +1,11 @@
 {
     "compilerOptions": {
         "target": "ESNext",
+        "module": "ESNext",
         "strict": true,
         "esModuleInterop": true,
         "moduleResolution": "node",
+        "ignoreDeprecations": "5.0",
         "forceConsistentCasingInFileNames": true,
         "stripInternal": true,
         "noEmitOnError": true,
