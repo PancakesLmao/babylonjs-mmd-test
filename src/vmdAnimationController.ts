@@ -23,6 +23,20 @@ export class VmdAnimationController {
 
     public async loadVmdFile(file: File): Promise<void> {
         try {
+            // Validate file is a VMD file
+            if (!file.name.toLowerCase().endsWith(".vmd")) {
+                throw new Error(
+                    `Invalid file type. Expected .vmd file, got ${file.name}`
+                );
+            }
+
+            console.log(
+                "Loading VMD animation from:",
+                file.name,
+                "Size:",
+                file.size,
+                "bytes"
+            );
             const loader = new VmdLoader(this._scene);
             loader.loggingEnabled = true;
 
@@ -30,6 +44,11 @@ export class VmdAnimationController {
             const mmdAnimation = await loader.loadAsync(
                 file.name.replace(/\.[^.]+$/, ""), // Remove file extension for name
                 file
+            );
+
+            console.log(
+                "VMD loaded successfully. Has camera animation:",
+                !!(mmdAnimation as any).cameraAnimation
             );
 
             // Get the MMD model from runtime (first model)
@@ -58,7 +77,94 @@ export class VmdAnimationController {
 
             console.log("VMD animation loaded successfully");
         } catch (error) {
-            console.error("Failed to load VMD file:", error);
+            // Extract the actual error message from babylon-mmd's error object
+            let errorMsg = "Unknown error";
+
+            if (error instanceof Error) {
+                errorMsg = error.message;
+            } else if (typeof error === "object" && error !== null) {
+                // babylon-mmd returns error objects with exception property
+                const errorObj = error as any;
+                if (errorObj.exception instanceof Error) {
+                    errorMsg = errorObj.exception.message;
+                } else if (errorObj.exception) {
+                    errorMsg = String(errorObj.exception);
+                } else {
+                    errorMsg = JSON.stringify(error);
+                }
+            } else {
+                errorMsg = String(error);
+            }
+
+            console.error("Failed to load VMD file. Error:", errorMsg);
+            if (error instanceof Error && error.stack) {
+                console.error("Stack trace:", error.stack);
+            }
+            throw error;
+        }
+    }
+
+    public async loadCameraMotion(file: File): Promise<void> {
+        try {
+            // Validate file is a VMD file
+            if (!file.name.toLowerCase().endsWith(".vmd")) {
+                throw new Error(
+                    `Invalid file type. Expected .vmd file, got ${file.name}`
+                );
+            }
+
+            console.log(
+                "Loading camera motion:",
+                file.name,
+                "Size:",
+                file.size,
+                "bytes"
+            );
+            const loader = new VmdLoader(this._scene);
+            loader.loggingEnabled = true;
+
+            // Load camera motion from VMD file
+            const cameraAnimation = await loader.loadAsync(
+                file.name.replace(/\.[^.]+$/, ""),
+                file
+            );
+
+            console.log(
+                "Loaded animation has camera data:",
+                !!(cameraAnimation as any).cameraAnimation
+            );
+
+            if (this._mmdCamera) {
+                // Use the loaded animation as camera animation
+                const cameraAnimationHandle =
+          this._mmdCamera.createRuntimeAnimation(cameraAnimation);
+                this._mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
+                this._mmdRuntime.addAnimatable(this._mmdCamera);
+                console.log("Camera motion loaded successfully");
+            } else {
+                console.warn("Camera not available");
+            }
+        } catch (error) {
+            // Extract the actual error message from babylon-mmd's error object
+            let errorMsg = "Unknown error";
+
+            if (error instanceof Error) {
+                errorMsg = error.message;
+            } else if (typeof error === "object" && error !== null) {
+                // babylon-mmd returns error objects with exception property
+                const errorObj = error as any;
+                if (errorObj.exception instanceof Error) {
+                    errorMsg = errorObj.exception.message;
+                } else if (errorObj.exception) {
+                    errorMsg = String(errorObj.exception);
+                } else {
+                    errorMsg = JSON.stringify(error);
+                }
+            } else {
+                errorMsg = String(error);
+            }
+
+            console.error("Failed to load camera motion file. Error:", errorMsg);
             throw error;
         }
     }
@@ -96,10 +202,41 @@ export class VmdAnimationController {
 
     public stop(): void {
         this._isPlaying = false;
-        (this._mmdRuntime as any).pauseAnimation(false);
+        (this._mmdRuntime as any).pauseAnimation(true);
         // Reset to frame 0 using timeline
         (this._mmdRuntime as any).animationTimelineCurrentFrameIndex = 0;
         console.log("VMD animation playback stopped");
+    }
+
+    public reset(): void {
+    // First, pause animation completely to stop the internal timeline
+        this._isPlaying = false;
+        (this._mmdRuntime as any).pauseAnimation(true);
+
+        // Get the MMD model from runtime
+        const mmdModel = (this._mmdRuntime as any).models?.[0];
+
+        // Reset frame to 0
+        (this._mmdRuntime as any).animationTimelineCurrentFrameIndex = 0;
+
+        if (mmdModel && this._mmdAnimation) {
+            // Re-create and re-apply the animation to force babylon-mmd to update
+            // This resets babylon-mmd's internal animation state cache
+            const modelAnimationHandle = mmdModel.createRuntimeAnimation(
+                this._mmdAnimation
+            );
+            mmdModel.setRuntimeAnimation(modelAnimationHandle);
+
+            // Re-apply camera animation if available
+            if (this._mmdCamera && (this._mmdAnimation as any).cameraAnimation) {
+                const cameraAnimationHandle = this._mmdCamera.createRuntimeAnimation(
+                    (this._mmdAnimation as any).cameraAnimation
+                );
+                this._mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
+            }
+        }
+
+        console.log("VMD animation reset to frame 0");
     }
 
     public setFrame(frame: number): void {

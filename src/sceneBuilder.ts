@@ -20,6 +20,11 @@ import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 import { MmdWasmInstanceTypeMPR } from "babylon-mmd/esm/Runtime/Optimized/InstanceType/multiPhysicsRelease";
 import { GetMmdWasmInstance } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmInstance";
 import { MultiPhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/multiPhysicsRuntime";
+import { MotionType } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/motionType";
+import { PhysicsStaticPlaneShape } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/physicsShape";
+import { RigidBody } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBody";
+import { RigidBodyConstructionInfo } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBodyConstructionInfo";
+import { MmdBulletPhysics } from "babylon-mmd/esm/Runtime/Optimized/Physics/mmdBulletPhysics";
 
 import type { ISceneBuilder } from "./baseRuntime";
 import { BoneController } from "./boneController";
@@ -44,8 +49,8 @@ export class SceneBuilder implements ISceneBuilder {
         // Register physics runtime with scene
         physicsRuntime.register(scene);
 
-        // Create MmdRuntime for animation playback
-        const mmdRuntime = new MmdRuntime(scene);
+        // Create MmdRuntime for animation playback with physics engine
+        const mmdRuntime = new MmdRuntime(scene, new MmdBulletPhysics(physicsRuntime));
         mmdRuntime.loggingEnabled = true;
         mmdRuntime.register(scene);
 
@@ -80,6 +85,13 @@ export class SceneBuilder implements ISceneBuilder {
             scene
         );
         ground.receiveShadows = true;
+
+        // Add physics ground collider so the model can collide with ground
+        const groundPhysicsInfo = new RigidBodyConstructionInfo(physicsRuntime.wasmInstance);
+        groundPhysicsInfo.motionType = MotionType.Static;
+        groundPhysicsInfo.shape = new PhysicsStaticPlaneShape(physicsRuntime, new Vector3(0, 1, 0), 0);
+        const groundBody = new RigidBody(physicsRuntime, groundPhysicsInfo);
+        physicsRuntime.addRigidBodyToGlobal(groundBody);
 
         const modelMesh = await LoadAssetContainerAsync(
             "res/models/Manhattan_Casual/Manhattan.pmx",

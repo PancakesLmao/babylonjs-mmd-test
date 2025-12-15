@@ -193,7 +193,7 @@ export class BonePoseUI {
         vmdContainer.style.borderBottom = "1px solid #555";
 
         const vmdLabel = document.createElement("label");
-        vmdLabel.textContent = "Load VMD Animation:";
+        vmdLabel.textContent = "Load VMD Animation (Model Motion):";
         vmdLabel.style.display = "block";
         vmdLabel.style.marginBottom = "8px";
         vmdLabel.style.fontWeight = "bold";
@@ -224,6 +224,41 @@ export class BonePoseUI {
 
         vmdContainer.appendChild(vmdLabel);
         vmdContainer.appendChild(vmdFileInput);
+
+        // Add camera motion loading section
+        const cameraMotionLabel = document.createElement("label");
+        cameraMotionLabel.textContent = "Load Camera Motion (VMD):";
+        cameraMotionLabel.style.display = "block";
+        cameraMotionLabel.style.marginBottom = "8px";
+        cameraMotionLabel.style.fontWeight = "bold";
+        cameraMotionLabel.style.marginTop = "10px";
+
+        const cameraMotionInput = document.createElement("input");
+        cameraMotionInput.type = "file";
+        cameraMotionInput.accept = ".vmd";
+        cameraMotionInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        cameraMotionInput.addEventListener("change", async(e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadCameraMotion(file);
+                        alert("Camera motion loaded successfully.");
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load camera motion:", error);
+                    alert("Failed to load camera motion. Check console for details.");
+                }
+            }
+        });
+
+        vmdContainer.appendChild(cameraMotionLabel);
+        vmdContainer.appendChild(cameraMotionInput);
 
         // Add audio loading section
         const audioLabel = document.createElement("label");
@@ -272,7 +307,7 @@ export class BonePoseUI {
         const buttonRow = document.createElement("div");
         buttonRow.style.marginBottom = "10px";
         buttonRow.style.display = "grid";
-        buttonRow.style.gridTemplateColumns = "1fr 1fr 1fr";
+        buttonRow.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
         buttonRow.style.gap = "5px";
 
         const playBtn = document.createElement("button");
@@ -336,9 +371,29 @@ export class BonePoseUI {
             }
         });
 
+        const resetBtn = document.createElement("button");
+        resetBtn.textContent = "Reset";
+        resetBtn.id = "vmd-reset-btn";
+        resetBtn.style.cssText = `
+            padding: 6px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        `;
+        resetBtn.disabled = true;
+        resetBtn.addEventListener("click", () => {
+            if (this._vmdAnimationController) {
+                this._vmdAnimationController.reset();
+            }
+        });
+
         buttonRow.appendChild(playBtn);
         buttonRow.appendChild(pauseBtn);
         buttonRow.appendChild(stopBtn);
+        buttonRow.appendChild(resetBtn);
         animControlsDiv.appendChild(buttonRow);
 
         // Frame display and slider
@@ -598,11 +653,15 @@ export class BonePoseUI {
         const stopBtn = this._container.querySelector(
             "#vmd-stop-btn"
         ) as HTMLButtonElement;
+        const resetBtn = this._container.querySelector(
+            "#vmd-reset-btn"
+        ) as HTMLButtonElement;
 
-        if (playBtn && pauseBtn && stopBtn) {
+        if (playBtn && pauseBtn && stopBtn && resetBtn) {
             playBtn.disabled = false;
             pauseBtn.disabled = false;
             stopBtn.disabled = false;
+            resetBtn.disabled = false;
         }
 
         if (this._vmdAnimationController) {
