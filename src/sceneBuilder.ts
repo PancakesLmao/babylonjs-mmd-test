@@ -14,8 +14,10 @@ import { Scene } from "@babylonjs/core/scene";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
+import { MmdWasmInstanceTypeMPR } from "babylon-mmd/esm/Runtime/Optimized/InstanceType/multiPhysicsRelease";
+import { GetMmdWasmInstance } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmInstance";
+import { MultiPhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/multiPhysicsRuntime";
 
-//
 import type { ISceneBuilder } from "./baseRuntime";
 
 export class SceneBuilder implements ISceneBuilder {
@@ -23,10 +25,16 @@ export class SceneBuilder implements ISceneBuilder {
         _canvas: HTMLCanvasElement,
         engine: AbstractEngine
     ): Promise<Scene> {
+        const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeMPR());
+        const physicsRuntime = new MultiPhysicsRuntime(wasmInstance);
+        physicsRuntime.setGravity(new Vector3(0, -98, 0));
+
         const materialBuilder = new MmdStandardMaterialBuilder();
         const scene = new Scene(engine);
         scene.clearColor = new Color4(0.95, 0.95, 0.95, 1.0);
         scene.ambientColor = new Color3(0.5, 0.5, 0.5);
+
+        physicsRuntime.register(scene);
 
         const mmdCamera = new MmdCamera("MmdCamera", new Vector3(0, 10, 0), scene);
         scene.activeCamera = mmdCamera;
