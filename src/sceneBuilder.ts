@@ -19,6 +19,8 @@ import { GetMmdWasmInstance } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmIns
 import { MultiPhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/multiPhysicsRuntime";
 
 import type { ISceneBuilder } from "./baseRuntime";
+import { BoneController } from "./boneController";
+import { BonePoseUI } from "./bonePoseUI";
 
 export class SceneBuilder implements ISceneBuilder {
     public async build(
@@ -86,6 +88,10 @@ export class SceneBuilder implements ISceneBuilder {
 
         for (const mesh of modelMesh.metadata.meshes) mesh.receiveShadows = true;
         shadowGenerator.addShadowCaster(modelMesh);
+
+        // Initialize bone pose UI
+        const boneController = new BoneController(modelMesh);
+        new BonePoseUI(boneController);
 
         return scene;
     }

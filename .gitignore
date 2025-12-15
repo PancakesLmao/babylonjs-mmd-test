@@ -128,3 +128,5 @@ dist
 
 
 res/models/
+res/motion/
+res/poses/
