@@ -1,12 +1,18 @@
 import type { BoneController } from "./boneController";
+import type { CameraController } from "./cameraController";
 import { VpdLoader } from "./vpdLoader";
 
 export class BonePoseUI {
     private readonly _container: HTMLElement;
     private readonly _boneController: BoneController;
+    private readonly _cameraController: CameraController | null;
 
-    public constructor(boneController: BoneController) {
+    public constructor(
+        boneController: BoneController,
+        cameraController?: CameraController
+    ) {
         this._boneController = boneController;
+        this._cameraController = cameraController || null;
         this._container = document.createElement("div");
         this._container.id = "bone-pose-ui";
         this._container.style.cssText = `
@@ -58,6 +64,89 @@ export class BonePoseUI {
             4. Click "Reset All" to reset everything
         `;
         this._container.appendChild(instructions);
+
+        // Add camera controls section if available
+        if (this._cameraController) {
+            const cameraContainer = document.createElement("div");
+            cameraContainer.style.marginBottom = "15px";
+            cameraContainer.style.paddingBottom = "15px";
+            cameraContainer.style.borderBottom = "1px solid #555";
+
+            const cameraTitle = document.createElement("h4");
+            cameraTitle.textContent = "Camera Position";
+            cameraTitle.style.margin = "0 0 10px 0";
+            cameraContainer.appendChild(cameraTitle);
+
+            const cameraPos = this._cameraController.getPosition();
+            const axes = ["x", "y", "z"] as const;
+
+            for (const axis of axes) {
+                const controlDiv = document.createElement("div");
+                controlDiv.style.marginBottom = "8px";
+
+                const label = document.createElement("label");
+                label.textContent = axis.toUpperCase();
+                label.style.display = "inline-block";
+                label.style.width = "20px";
+                label.style.fontWeight = "bold";
+
+                const input = document.createElement("input");
+                input.type = "range";
+                input.min = "-50";
+                input.max = "50";
+                input.step = "0.5";
+                input.value = cameraPos[axis].toString();
+                input.style.cssText = "width: 160px; vertical-align: middle;";
+                input.dataset.axis = axis;
+
+                const valueDisplay = document.createElement("span");
+                valueDisplay.textContent = cameraPos[axis].toFixed(1);
+                valueDisplay.style.marginLeft = "10px";
+                valueDisplay.style.width = "45px";
+                valueDisplay.style.display = "inline-block";
+
+                input.addEventListener("input", () => {
+                    const value = parseFloat(input.value);
+                    valueDisplay.textContent = value.toFixed(1);
+          this._cameraController!.moveCamera(axis, value);
+                });
+
+                controlDiv.appendChild(label);
+                controlDiv.appendChild(input);
+                controlDiv.appendChild(valueDisplay);
+                cameraContainer.appendChild(controlDiv);
+            }
+
+            const resetCameraBtn = document.createElement("button");
+            resetCameraBtn.textContent = "Reset Camera";
+            resetCameraBtn.style.cssText = `
+                width: 100%;
+                padding: 8px;
+                margin-top: 10px;
+                background: #666;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+            resetCameraBtn.addEventListener("click", () => {
+        this._cameraController!.reset();
+        // Update sliders and display
+        const defaultState = this._cameraController!.getDefaultState();
+        const inputs = cameraContainer.querySelectorAll("input[type='range']");
+        inputs.forEach((input, index) => {
+            const axis = ["x", "y", "z"][
+                index
+            ] as keyof typeof defaultState.position;
+            const value = defaultState.position[axis];
+            (input as HTMLInputElement).value = value.toString();
+            (input.nextElementSibling as HTMLElement).textContent =
+            value.toFixed(1);
+        });
+            });
+            cameraContainer.appendChild(resetCameraBtn);
+            this._container.appendChild(cameraContainer);
+        }
 
         // Add VPD loading section
         const vpdContainer = document.createElement("div");
