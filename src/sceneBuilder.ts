@@ -50,7 +50,10 @@ export class SceneBuilder implements ISceneBuilder {
         physicsRuntime.register(scene);
 
         // Create MmdRuntime for animation playback with physics engine
-        const mmdRuntime = new MmdRuntime(scene, new MmdBulletPhysics(physicsRuntime));
+        const mmdRuntime = new MmdRuntime(
+            scene,
+            new MmdBulletPhysics(physicsRuntime)
+        );
         mmdRuntime.loggingEnabled = true;
         mmdRuntime.register(scene);
 
@@ -87,14 +90,20 @@ export class SceneBuilder implements ISceneBuilder {
         ground.receiveShadows = true;
 
         // Add physics ground collider so the model can collide with ground
-        const groundPhysicsInfo = new RigidBodyConstructionInfo(physicsRuntime.wasmInstance);
+        const groundPhysicsInfo = new RigidBodyConstructionInfo(
+            physicsRuntime.wasmInstance
+        );
         groundPhysicsInfo.motionType = MotionType.Static;
-        groundPhysicsInfo.shape = new PhysicsStaticPlaneShape(physicsRuntime, new Vector3(0, 1, 0), 0);
+        groundPhysicsInfo.shape = new PhysicsStaticPlaneShape(
+            physicsRuntime,
+            new Vector3(0, 1, 0),
+            0
+        );
         const groundBody = new RigidBody(physicsRuntime, groundPhysicsInfo);
         physicsRuntime.addRigidBodyToGlobal(groundBody);
 
         const modelMesh = await LoadAssetContainerAsync(
-            "res/models/Manhattan_Casual/Manhattan.pmx",
+            "res/models/galleon/galleon_ver2.00/galleon.pmx",
             scene,
             {
                 pluginOptions: {
@@ -112,9 +121,6 @@ export class SceneBuilder implements ISceneBuilder {
         for (const mesh of modelMesh.metadata.meshes) mesh.receiveShadows = true;
         shadowGenerator.addShadowCaster(modelMesh);
 
-        // Create MmdModel from the loaded mesh to enable animation playback
-        mmdRuntime.createMmdModel(modelMesh);
-
         // Initialize bone pose UI and camera controller
         const boneController = new BoneController(modelMesh);
         const cameraController = new CameraController(mmdCamera);
@@ -123,6 +129,10 @@ export class SceneBuilder implements ISceneBuilder {
             mmdRuntime
         );
         vmdAnimationController.setMmdCamera(mmdCamera);
+        vmdAnimationController.setShadowGenerator(shadowGenerator);
+        // Register the initial model
+        vmdAnimationController.registerInitialModel(modelMesh);
+
         const bonePoseUI = new BonePoseUI(
             boneController,
             cameraController,

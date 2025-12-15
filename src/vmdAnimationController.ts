@@ -1,7 +1,14 @@
+import "babylon-mmd/esm/Loader/pmxLoader";
+
+import type { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
+import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
 import type { Scene } from "@babylonjs/core/scene";
+import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
 import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
 import type { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
+import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
+import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 
 export class VmdAnimationController {
@@ -11,6 +18,9 @@ export class VmdAnimationController {
     private _mmdAnimation: any = null;
     private _isPlaying: boolean = false;
     private _playbackSpeed: number = 1.0;
+    private _shadowGenerator: ShadowGenerator | null = null;
+    private readonly _loadedModels: MmdModel[] = []; // Track all loaded models
+    private readonly _modelAnimations: Map<MmdModel, any> = new Map(); // Store animations per model
 
     public constructor(scene: Scene, mmdRuntime: MmdRuntime) {
         this._scene = scene;
@@ -19,6 +29,113 @@ export class VmdAnimationController {
 
     public setMmdCamera(mmdCamera: MmdCamera): void {
         this._mmdCamera = mmdCamera;
+    }
+
+    public getLoadedModels(): MmdModel[] {
+        return this._loadedModels;
+    }
+
+    public onModelLoaded(
+        callback: (model: MmdModel, modelIndex: number) => void
+    ): void {
+    // Store callback to be called when models are loaded
+        (this._mmdRuntime as any)._onModelLoadedCallback = callback;
+    }
+    public setShadowGenerator(shadowGenerator: ShadowGenerator): void {
+        this._shadowGenerator = shadowGenerator;
+    }
+
+    public registerInitialModel(modelMesh: MmdMesh): void {
+    // Register the initial model loaded at startup
+        const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
+        this._loadedModels.push(mmdModel);
+        console.log("Initial model registered with index 0");
+    }
+
+    public async loadModel(modelPath: string): Promise<MmdMesh> {
+        try {
+            console.log("Loading model:", modelPath);
+            const materialBuilder = new MmdStandardMaterialBuilder();
+
+            const modelMesh = await LoadAssetContainerAsync(modelPath, this._scene, {
+                pluginOptions: {
+                    mmdmodel: {
+                        loggingEnabled: true,
+                        materialBuilder: materialBuilder
+                    }
+                }
+            }).then((result) => {
+                result.addAllToScene();
+                return result.rootNodes[0] as MmdMesh;
+            });
+
+            // Add shadow casting
+            if (this._shadowGenerator) {
+                for (const mesh of modelMesh.metadata.meshes) {
+                    mesh.receiveShadows = true;
+                }
+                this._shadowGenerator.addShadowCaster(modelMesh);
+            }
+
+            // Register with MmdRuntime and track the created MmdModel
+            const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
+            this._loadedModels.push(mmdModel);
+            console.log("Model loaded successfully:", modelPath);
+            return modelMesh;
+        } catch (error) {
+            console.error("Failed to load model:", error);
+            throw error;
+        }
+    }
+
+    public async loadModelFromFile(file: File): Promise<MmdMesh> {
+        try {
+            console.log("Loading model from file:", file.name);
+            const materialBuilder = new MmdStandardMaterialBuilder();
+
+            // Create a blob URL and append the filename to help babylon-mmd detect the file type
+            const blobUrl = URL.createObjectURL(file);
+            // Append filename as a hint for the loader
+            const urlWithHint = blobUrl + "#" + file.name;
+
+            try {
+                const container = await LoadAssetContainerAsync(
+                    urlWithHint,
+                    this._scene,
+                    {
+                        pluginOptions: {
+                            mmdmodel: {
+                                loggingEnabled: true,
+                                materialBuilder: materialBuilder
+                            }
+                        }
+                    }
+                );
+
+                container.addAllToScene();
+                const modelMesh = container.rootNodes[0] as MmdMesh;
+
+                // Add shadow casting
+                if (this._shadowGenerator) {
+                    for (const mesh of modelMesh.metadata.meshes) {
+                        mesh.receiveShadows = true;
+                    }
+                    this._shadowGenerator.addShadowCaster(modelMesh);
+                }
+
+                // Register with MmdRuntime and track the created MmdModel
+                const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
+                this._loadedModels.push(mmdModel);
+                console.log("Model loaded successfully from file:", file.name);
+                return modelMesh;
+            } finally {
+                // Clean up blob URL
+                URL.revokeObjectURL(blobUrl);
+            }
+        } catch (error) {
+            console.error("Failed to load model from file:", error);
+            throw error;
+        }
     }
 
     public async loadVmdFile(file: File): Promise<void> {
@@ -97,6 +214,202 @@ export class VmdAnimationController {
             }
 
             console.error("Failed to load VMD file. Error:", errorMsg);
+            if (error instanceof Error && error.stack) {
+                console.error("Stack trace:", error.stack);
+            }
+            throw error;
+        }
+    }
+
+    public async loadVmdForModel(file: File, modelIndex: number): Promise<void> {
+        try {
+            if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+                throw new Error(`Invalid model index: ${modelIndex}`);
+            }
+
+            const targetModel = this._loadedModels[modelIndex];
+
+            // Validate file is a VMD file
+            if (!file.name.toLowerCase().endsWith(".vmd")) {
+                throw new Error(
+                    `Invalid file type. Expected .vmd file, got ${file.name}`
+                );
+            }
+
+            console.log(
+                "Loading VMD animation for model",
+                modelIndex,
+                "from:",
+                file.name
+            );
+            const loader = new VmdLoader(this._scene);
+            loader.loggingEnabled = true;
+
+            // Load animation using babylon-mmd's native loader
+            const mmdAnimation = await loader.loadAsync(
+                file.name.replace(/\.[^.]+$/, ""), // Remove file extension for name
+                file
+            );
+
+            console.log(
+                "VMD loaded successfully for model",
+                modelIndex,
+                "Has camera animation:",
+                !!(mmdAnimation as any).cameraAnimation
+            );
+
+            // Apply animation to the specific model
+            const modelAnimationHandle =
+        targetModel.createRuntimeAnimation(mmdAnimation);
+            targetModel.setRuntimeAnimation(modelAnimationHandle);
+
+            // Store animation for this model
+            this._modelAnimations.set(targetModel, mmdAnimation);
+
+            console.log("VMD animation loaded successfully for model", modelIndex);
+        } catch (error) {
+            // Extract the actual error message from babylon-mmd's error object
+            let errorMsg = "Unknown error";
+
+            if (error instanceof Error) {
+                errorMsg = error.message;
+            } else if (typeof error === "object" && error !== null) {
+                // babylon-mmd returns error objects with exception property
+                const errorObj = error as any;
+                if (errorObj.exception instanceof Error) {
+                    errorMsg = errorObj.exception.message;
+                } else if (errorObj.exception) {
+                    errorMsg = String(errorObj.exception);
+                } else {
+                    errorMsg = JSON.stringify(error);
+                }
+            } else {
+                errorMsg = String(error);
+            }
+
+            console.error("Failed to load VMD file for model. Error:", errorMsg);
+            if (error instanceof Error && error.stack) {
+                console.error("Stack trace:", error.stack);
+            }
+            throw error;
+        }
+    }
+
+    public async loadVmdForModelWithMorphs(
+        motionFile: File,
+        morphFile: File | null,
+        modelIndex: number
+    ): Promise<void> {
+        try {
+            if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+                throw new Error(`Invalid model index: ${modelIndex}`);
+            }
+
+            const targetModel = this._loadedModels[modelIndex];
+
+            // Validate motion file is a VMD file
+            if (!motionFile.name.toLowerCase().endsWith(".vmd")) {
+                throw new Error(
+                    `Invalid motion file type. Expected .vmd file, got ${motionFile.name}`
+                );
+            }
+
+            const loader = new VmdLoader(this._scene);
+            loader.loggingEnabled = true;
+
+            console.log(
+                "Loading motion VMD for model",
+                modelIndex,
+                "from:",
+                motionFile.name
+            );
+
+            // Load motion animation
+            const motionAnimation = await loader.loadAsync(
+                motionFile.name.replace(/\.[^.]+$/, ""),
+                motionFile
+            );
+
+            console.log("Motion VMD loaded successfully for model", modelIndex);
+
+            let finalAnimation: any = motionAnimation;
+
+            // Load and merge morph animation if provided
+            if (morphFile && morphFile.name.toLowerCase().endsWith(".vmd")) {
+                console.log(
+                    "Loading facial expression VMD for model",
+                    modelIndex,
+                    "from:",
+                    morphFile.name
+                );
+
+                const morphAnimation = (await loader.loadAsync(
+                    morphFile.name.replace(/\.[^.]+$/, ""),
+                    morphFile
+                )) as any;
+
+                console.log(
+                    "Facial expression VMD loaded successfully for model",
+                    modelIndex
+                );
+
+                // Merge morph data BEFORE creating runtime animation
+                const motionAnimationAny = motionAnimation as any;
+                if (morphAnimation.morphAnimation) {
+                    if (!motionAnimationAny.morphAnimation) {
+                        motionAnimationAny.morphAnimation = morphAnimation.morphAnimation;
+                    } else {
+                        // Merge morph keyframes from facial expression into motion
+                        const motionMorphs = motionAnimationAny.morphAnimation;
+                        const morphMorphs = morphAnimation.morphAnimation;
+
+                        // Copy morph data
+                        for (const morphName in morphMorphs) {
+                            motionMorphs[morphName] = morphMorphs[morphName];
+                        }
+                    }
+                    console.log(
+                        "Facial expression merged with motion animation for model",
+                        modelIndex
+                    );
+                }
+
+                finalAnimation = motionAnimation;
+            }
+
+            // Apply the final animation (motion + merged morphs) to the model
+            const modelAnimationHandle =
+        targetModel.createRuntimeAnimation(finalAnimation);
+            targetModel.setRuntimeAnimation(modelAnimationHandle);
+            console.log("Animation applied to model", modelIndex);
+
+            // Store animation for this model
+            this._modelAnimations.set(targetModel, finalAnimation);
+
+            console.log("Animation loaded successfully for model", modelIndex);
+        } catch (error) {
+            // Extract the actual error message from babylon-mmd's error object
+            let errorMsg = "Unknown error";
+
+            if (error instanceof Error) {
+                errorMsg = error.message;
+            } else if (typeof error === "object" && error !== null) {
+                const errorObj = error as any;
+                if (errorObj.exception instanceof Error) {
+                    errorMsg = errorObj.exception.message;
+                } else if (errorObj.exception) {
+                    errorMsg = String(errorObj.exception);
+                } else {
+                    errorMsg = JSON.stringify(error);
+                }
+            } else {
+                errorMsg = String(error);
+            }
+
+            console.error(
+                "Failed to load VMD animation with morphs for model. Error:",
+                errorMsg
+            );
             if (error instanceof Error && error.stack) {
                 console.error("Stack trace:", error.stack);
             }

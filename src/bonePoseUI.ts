@@ -186,6 +186,89 @@ export class BonePoseUI {
         vpdContainer.appendChild(vpdFileInput);
         this._container.appendChild(vpdContainer);
 
+        // Add model loading section
+        const modelContainer = document.createElement("div");
+        modelContainer.style.marginBottom = "15px";
+        modelContainer.style.paddingBottom = "15px";
+        modelContainer.style.borderBottom = "1px solid #555";
+
+        const modelLabel = document.createElement("label");
+        modelLabel.textContent = "Load Second Model:";
+        modelLabel.style.display = "block";
+        modelLabel.style.marginBottom = "8px";
+        modelLabel.style.fontWeight = "bold";
+
+        const modelSelect = document.createElement("select");
+        modelSelect.style.cssText =
+      "width: 100%; margin-bottom: 8px; padding: 6px;";
+
+        // Add default option
+        const modelDefaultOption = document.createElement("option");
+        modelDefaultOption.value = "";
+        modelDefaultOption.textContent = "Select a model...";
+        modelSelect.appendChild(modelDefaultOption);
+
+        // Add available models
+        const availableModels = [
+            { path: "res/models/Kitasan/Kitasan.pmx", name: "Kitasan" },
+            {
+                path: "res/models/Manhattan_Casual/Manhattan.pmx",
+                name: "Manhattan Casual"
+            },
+            {
+                path: "res/models/Manhattan_Default/Manhattan.pmx",
+                name: "Manhattan Default"
+            },
+            {
+                path: "res/models/帕朵菲莉丝泳装/帕朵泳装.pmx",
+                name: "Parodos Swimsuit"
+            },
+            {
+                path: "res/models/Sanoto/é¥éóéÔ_v1.3.pmx",
+                name: "Sanoto"
+            }
+        ];
+
+        for (const model of availableModels) {
+            const option = document.createElement("option");
+            option.value = model.path;
+            option.textContent = model.name;
+            modelSelect.appendChild(option);
+        }
+
+        modelSelect.addEventListener("change", async() => {
+            const selectedPath = modelSelect.value;
+            if (selectedPath) {
+                try {
+                    if (this._vmdAnimationController) {
+                        const modelMesh = await this._vmdAnimationController.loadModel(
+                            selectedPath
+                        );
+                        console.log("Second model loaded:", modelMesh);
+                        alert(
+                            "Second model loaded successfully! The new model will play the same animation."
+                        );
+                        // Reset dropdown after successful load
+                        modelSelect.value = "";
+
+                        // Show animation controls for second model
+                        this._showSecondModelAnimationControls();
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load model:", error);
+                    alert("Failed to load model. Check console for details.");
+                }
+            }
+        });
+
+        modelContainer.appendChild(modelLabel);
+        modelContainer.appendChild(modelSelect);
+        this._container.appendChild(modelContainer);
+
         // Add VMD loading and animation section
         const vmdContainer = document.createElement("div");
         vmdContainer.style.marginBottom = "15px";
@@ -200,14 +283,24 @@ export class BonePoseUI {
 
         const vmdFileInput = document.createElement("input");
         vmdFileInput.type = "file";
-        vmdFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+        vmdFileInput.id = "first-model-motion-vmd";
+        vmdFileInput.style.cssText = "width: 100%; margin-bottom: 12px;";
 
         vmdFileInput.addEventListener("change", async(e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (file) {
+            const motionFile = (e.target as HTMLInputElement).files?.[0];
+            if (motionFile) {
                 try {
                     if (this._vmdAnimationController) {
-                        await this._vmdAnimationController.loadVmdFile(file);
+                        const morphFile = (
+              vmdContainer.querySelector(
+                  "#first-model-morph-vmd"
+              ) as HTMLInputElement
+                        )?.files?.[0];
+                        await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                            motionFile,
+                            morphFile || null,
+                            0
+                        );
                         // Update animation UI
                         this._updateAnimationControls();
                     } else {
@@ -224,6 +317,58 @@ export class BonePoseUI {
 
         vmdContainer.appendChild(vmdLabel);
         vmdContainer.appendChild(vmdFileInput);
+
+        // Add facial expression import for first model
+        const morphLabel = document.createElement("label");
+        morphLabel.textContent = "Load Facial Expression VMD (Optional):";
+        morphLabel.style.display = "block";
+        morphLabel.style.marginBottom = "8px";
+        morphLabel.style.fontWeight = "bold";
+
+        const morphFileInput = document.createElement("input");
+        morphFileInput.type = "file";
+        morphFileInput.accept = ".vmd";
+        morphFileInput.id = "first-model-morph-vmd";
+        morphFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        morphFileInput.addEventListener("change", async(e) => {
+            const morphFile = (e.target as HTMLInputElement).files?.[0];
+            const motionFile = (
+        vmdContainer.querySelector(
+            "#first-model-motion-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+
+            if (morphFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        if (motionFile) {
+                            // Both motion and morphs loaded
+                            await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                                motionFile,
+                                morphFile,
+                                0
+                            );
+                            this._updateAnimationControls();
+                        } else {
+                            // Only facial/morphs - load as regular VMD
+                            await this._vmdAnimationController.loadVmdFile(morphFile);
+                            this._updateAnimationControls();
+                        }
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load animation with morphs:", error);
+                    alert("Failed to load animation. Check console for details.");
+                }
+            }
+        });
+
+        vmdContainer.appendChild(morphLabel);
+        vmdContainer.appendChild(morphFileInput);
 
         // Add camera motion loading section
         const cameraMotionLabel = document.createElement("label");
@@ -733,5 +878,127 @@ export class BonePoseUI {
         };
 
         this._animationUpdateHandle = requestAnimationFrame(updateFrame);
+    }
+
+    private _showSecondModelAnimationControls(): void {
+        const secondModelIndex = 1; // Index of the second model
+
+        // Check if controls already exist
+        const existingControls = this._container.querySelector(
+            "#second-model-animation-controls"
+        );
+        if (existingControls) {
+            return; // Already shown, don't create duplicate
+        }
+
+        // Create container for second model controls
+        const secondModelContainer = document.createElement("div");
+        secondModelContainer.id = "second-model-animation-controls";
+        secondModelContainer.style.marginTop = "15px";
+        secondModelContainer.style.paddingTop = "15px";
+        secondModelContainer.style.borderTop = "2px solid #6496c8";
+
+        const secondModelTitle = document.createElement("h4");
+        secondModelTitle.textContent = "Second Model Animation";
+        secondModelTitle.style.margin = "0 0 10px 0";
+        secondModelTitle.style.color = "#6496c8";
+        secondModelContainer.appendChild(secondModelTitle);
+
+        // Motion VMD file input
+        const secondModelVmdLabel = document.createElement("label");
+        secondModelVmdLabel.textContent = "Load Motion VMD (Body/Bones):";
+        secondModelVmdLabel.style.display = "block";
+        secondModelVmdLabel.style.marginBottom = "8px";
+        secondModelVmdLabel.style.fontWeight = "bold";
+
+        const secondModelVmdInput = document.createElement("input");
+        secondModelVmdInput.type = "file";
+        secondModelVmdInput.accept = ".vmd";
+        secondModelVmdInput.id = "second-model-motion-vmd";
+        secondModelVmdInput.style.cssText = "width: 100%; margin-bottom: 12px;";
+
+        secondModelVmdInput.addEventListener("change", async(e) => {
+            const motionFile = (e.target as HTMLInputElement).files?.[0];
+            const morphFile = (
+        secondModelContainer.querySelector(
+            "#second-model-morph-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+
+            if (motionFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                            motionFile,
+                            morphFile || null,
+                            secondModelIndex
+                        );
+                        alert("Animation loaded for second model successfully!");
+                    } else {
+                        alert("Animation controller not initialized.");
+                    }
+                } catch (error) {
+                    console.error("Failed to load animation for second model:", error);
+                    alert("Failed to load animation. Check console for details.");
+                }
+            }
+        });
+
+        secondModelContainer.appendChild(secondModelVmdLabel);
+        secondModelContainer.appendChild(secondModelVmdInput);
+
+        // Morph/Facial Expression VMD file input
+        const secondModelMorphLabel = document.createElement("label");
+        secondModelMorphLabel.textContent =
+      "Load Facial Expression VMD (Optional):";
+        secondModelMorphLabel.style.display = "block";
+        secondModelMorphLabel.style.marginBottom = "8px";
+        secondModelMorphLabel.style.fontWeight = "bold";
+
+        const secondModelMorphInput = document.createElement("input");
+        secondModelMorphInput.type = "file";
+        secondModelMorphInput.accept = ".vmd";
+        secondModelMorphInput.id = "second-model-morph-vmd";
+        secondModelMorphInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        secondModelMorphInput.addEventListener("change", async(e) => {
+            const morphFile = (e.target as HTMLInputElement).files?.[0];
+            const motionFile = (
+        secondModelContainer.querySelector(
+            "#second-model-motion-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+
+            if (morphFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        if (motionFile) {
+                            // Both motion and morphs loaded
+                            await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                                motionFile,
+                                morphFile,
+                                secondModelIndex
+                            );
+                        } else {
+                            // Only facial/morphs - load as regular VMD for this model
+                            await this._vmdAnimationController.loadVmdForModel(
+                                morphFile,
+                                secondModelIndex
+                            );
+                        }
+                        alert("Animation loaded for second model successfully!");
+                    } else {
+                        alert("Animation controller not initialized.");
+                    }
+                } catch (error) {
+                    console.error("Failed to load animation for second model:", error);
+                    alert("Failed to load animation. Check console for details.");
+                }
+            }
+        });
+
+        secondModelContainer.appendChild(secondModelMorphLabel);
+        secondModelContainer.appendChild(secondModelMorphInput);
+        this._container.appendChild(secondModelContainer);
     }
 }
