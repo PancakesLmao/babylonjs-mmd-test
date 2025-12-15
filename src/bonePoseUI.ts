@@ -1,18 +1,23 @@
 import type { BoneController } from "./boneController";
 import type { CameraController } from "./cameraController";
+import type { VmdAnimationController } from "./vmdAnimationController";
 import { VpdLoader } from "./vpdLoader";
 
 export class BonePoseUI {
     private readonly _container: HTMLElement;
     private readonly _boneController: BoneController;
     private readonly _cameraController: CameraController | null;
+    private _vmdAnimationController: VmdAnimationController | null;
+    private _animationUpdateHandle: number | null = null;
 
     public constructor(
         boneController: BoneController,
-        cameraController?: CameraController
+        cameraController?: CameraController,
+        vmdAnimationController?: VmdAnimationController
     ) {
         this._boneController = boneController;
         this._cameraController = cameraController || null;
+        this._vmdAnimationController = vmdAnimationController || null;
         this._container = document.createElement("div");
         this._container.id = "bone-pose-ui";
         this._container.style.cssText = `
@@ -162,7 +167,6 @@ export class BonePoseUI {
 
         const vpdFileInput = document.createElement("input");
         vpdFileInput.type = "file";
-        vpdFileInput.accept = ".vpd";
         vpdFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
 
         vpdFileInput.addEventListener("change", async(e) => {
@@ -181,6 +185,201 @@ export class BonePoseUI {
         vpdContainer.appendChild(vpdLabel);
         vpdContainer.appendChild(vpdFileInput);
         this._container.appendChild(vpdContainer);
+
+        // Add VMD loading and animation section
+        const vmdContainer = document.createElement("div");
+        vmdContainer.style.marginBottom = "15px";
+        vmdContainer.style.paddingBottom = "15px";
+        vmdContainer.style.borderBottom = "1px solid #555";
+
+        const vmdLabel = document.createElement("label");
+        vmdLabel.textContent = "Load VMD Animation:";
+        vmdLabel.style.display = "block";
+        vmdLabel.style.marginBottom = "8px";
+        vmdLabel.style.fontWeight = "bold";
+
+        const vmdFileInput = document.createElement("input");
+        vmdFileInput.type = "file";
+        vmdFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        vmdFileInput.addEventListener("change", async(e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (file) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadVmdFile(file);
+                        // Update animation UI
+                        this._updateAnimationControls();
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load VMD file:", error);
+                    alert("Failed to load VMD file. Check console for details.");
+                }
+            }
+        });
+
+        vmdContainer.appendChild(vmdLabel);
+        vmdContainer.appendChild(vmdFileInput);
+
+        // Animation controls
+        const animControlsDiv = document.createElement("div");
+        animControlsDiv.id = "vmd-controls";
+        animControlsDiv.style.cssText = `
+            background: rgba(100, 100, 100, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+        `;
+
+        const buttonRow = document.createElement("div");
+        buttonRow.style.marginBottom = "10px";
+        buttonRow.style.display = "grid";
+        buttonRow.style.gridTemplateColumns = "1fr 1fr 1fr";
+        buttonRow.style.gap = "5px";
+
+        const playBtn = document.createElement("button");
+        playBtn.textContent = "Play";
+        playBtn.id = "vmd-play-btn";
+        playBtn.style.cssText = `
+            padding: 6px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        `;
+        playBtn.disabled = true;
+        playBtn.addEventListener("click", () => {
+            if (this._vmdAnimationController) {
+                this._vmdAnimationController.play();
+                this._startAnimationLoop();
+                this._updatePlayButtonState();
+            }
+        });
+
+        const pauseBtn = document.createElement("button");
+        pauseBtn.textContent = "Pause";
+        pauseBtn.id = "vmd-pause-btn";
+        pauseBtn.style.cssText = `
+            padding: 6px;
+            background: #FF9800;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        `;
+        pauseBtn.disabled = true;
+        pauseBtn.addEventListener("click", () => {
+            if (this._vmdAnimationController) {
+                this._vmdAnimationController.pause();
+                this._updatePlayButtonState();
+            }
+        });
+
+        const stopBtn = document.createElement("button");
+        stopBtn.textContent = "Stop";
+        stopBtn.id = "vmd-stop-btn";
+        stopBtn.style.cssText = `
+            padding: 6px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        `;
+        stopBtn.disabled = true;
+        stopBtn.addEventListener("click", () => {
+            if (this._vmdAnimationController) {
+                this._vmdAnimationController.stop();
+                this._updatePlayButtonState();
+            }
+        });
+
+        buttonRow.appendChild(playBtn);
+        buttonRow.appendChild(pauseBtn);
+        buttonRow.appendChild(stopBtn);
+        animControlsDiv.appendChild(buttonRow);
+
+        // Frame display and slider
+        const frameDiv = document.createElement("div");
+        frameDiv.style.marginBottom = "8px";
+
+        const frameLabel = document.createElement("label");
+        frameLabel.textContent = "Frame:";
+        frameLabel.style.display = "block";
+        frameLabel.style.marginBottom = "4px";
+        frameLabel.style.fontSize = "11px";
+
+        const frameSlider = document.createElement("input");
+        frameSlider.type = "range";
+        frameSlider.id = "vmd-frame-slider";
+        frameSlider.min = "0";
+        frameSlider.max = "0";
+        frameSlider.value = "0";
+        frameSlider.style.cssText = "width: 100%; vertical-align: middle;";
+
+        const frameDisplay = document.createElement("span");
+        frameDisplay.id = "vmd-frame-display";
+        frameDisplay.textContent = "0 / 0";
+        frameDisplay.style.marginLeft = "10px";
+        frameDisplay.style.fontSize = "11px";
+
+        frameSlider.addEventListener("input", () => {
+            if (this._vmdAnimationController) {
+                const frame = parseInt(frameSlider.value);
+                this._vmdAnimationController.setFrame(frame);
+                frameDisplay.textContent = `${frame} / ${this._vmdAnimationController.getTotalFrames()}`;
+            }
+        });
+
+        frameDiv.appendChild(frameLabel);
+        frameDiv.appendChild(frameSlider);
+        frameDiv.appendChild(frameDisplay);
+        animControlsDiv.appendChild(frameDiv);
+
+        // Playback speed
+        const speedDiv = document.createElement("div");
+        const speedLabel = document.createElement("label");
+        speedLabel.textContent = "Speed:";
+        speedLabel.style.display = "inline-block";
+        speedLabel.style.width = "35px";
+        speedLabel.style.fontSize = "11px";
+
+        const speedInput = document.createElement("input");
+        speedInput.type = "range";
+        speedInput.min = "0.5";
+        speedInput.max = "2";
+        speedInput.step = "0.1";
+        speedInput.value = "1";
+        speedInput.style.cssText = "width: 120px; vertical-align: middle;";
+
+        const speedDisplay = document.createElement("span");
+        speedDisplay.textContent = "1.0x";
+        speedDisplay.style.marginLeft = "10px";
+        speedDisplay.style.fontSize = "11px";
+
+        speedInput.addEventListener("input", () => {
+            const speed = parseFloat(speedInput.value);
+            speedDisplay.textContent = `${speed.toFixed(1)}x`;
+            if (this._vmdAnimationController) {
+                this._vmdAnimationController.setPlaybackSpeed(speed);
+            }
+        });
+
+        speedDiv.appendChild(speedLabel);
+        speedDiv.appendChild(speedInput);
+        speedDiv.appendChild(speedDisplay);
+        animControlsDiv.appendChild(speedDiv);
+
+        animControlsDiv.style.display = "none"; // Hidden until VMD is loaded
+        vmdContainer.appendChild(animControlsDiv);
+        this._container.appendChild(vmdContainer);
 
         const bones = this._boneController.getBones();
 
@@ -338,5 +537,107 @@ export class BonePoseUI {
 
     public destroy(): void {
         this._container.remove();
+        if (this._animationUpdateHandle !== null) {
+            cancelAnimationFrame(this._animationUpdateHandle);
+        }
+    }
+
+    public setVmdAnimationController(controller: VmdAnimationController): void {
+        this._vmdAnimationController = controller;
+    }
+
+    private _updateAnimationControls(): void {
+        const controlsDiv = this._container.querySelector(
+            "#vmd-controls"
+        ) as HTMLElement;
+        if (!controlsDiv) return;
+
+        controlsDiv.style.display = "block";
+
+        const playBtn = this._container.querySelector(
+            "#vmd-play-btn"
+        ) as HTMLButtonElement;
+        const pauseBtn = this._container.querySelector(
+            "#vmd-pause-btn"
+        ) as HTMLButtonElement;
+        const stopBtn = this._container.querySelector(
+            "#vmd-stop-btn"
+        ) as HTMLButtonElement;
+
+        if (playBtn && pauseBtn && stopBtn) {
+            playBtn.disabled = false;
+            pauseBtn.disabled = false;
+            stopBtn.disabled = false;
+        }
+
+        if (this._vmdAnimationController) {
+            const frameSlider = this._container.querySelector(
+                "#vmd-frame-slider"
+            ) as HTMLInputElement;
+            const frameDisplay = this._container.querySelector(
+                "#vmd-frame-display"
+            ) as HTMLElement;
+
+            if (frameSlider && frameDisplay) {
+                const totalFrames = this._vmdAnimationController.getTotalFrames();
+                frameSlider.max = totalFrames.toString();
+                frameDisplay.textContent = `0 / ${totalFrames}`;
+            }
+        }
+
+        this._updatePlayButtonState();
+    }
+
+    private _updatePlayButtonState(): void {
+        const playBtn = this._container.querySelector(
+            "#vmd-play-btn"
+        ) as HTMLButtonElement;
+        const pauseBtn = this._container.querySelector(
+            "#vmd-pause-btn"
+        ) as HTMLButtonElement;
+
+        if (playBtn && pauseBtn && this._vmdAnimationController) {
+            if (this._vmdAnimationController.isPlaying()) {
+                playBtn.disabled = true;
+                pauseBtn.disabled = false;
+            } else {
+                playBtn.disabled = false;
+                pauseBtn.disabled = true;
+            }
+        }
+    }
+
+    private _startAnimationLoop(): void {
+        if (this._animationUpdateHandle !== null) {
+            return; // Already running
+        }
+
+        const frameSlider = this._container.querySelector(
+            "#vmd-frame-slider"
+        ) as HTMLInputElement;
+        const frameDisplay = this._container.querySelector(
+            "#vmd-frame-display"
+        ) as HTMLElement;
+
+        const updateFrame = (): void => {
+            if (
+                this._vmdAnimationController &&
+        this._vmdAnimationController.isPlaying()
+            ) {
+                const currentFrame = this._vmdAnimationController.getCurrentFrame();
+                if (frameSlider) {
+                    frameSlider.value = currentFrame.toString();
+                }
+                if (frameDisplay) {
+                    frameDisplay.textContent = `${currentFrame} / ${this._vmdAnimationController.getTotalFrames()}`;
+                }
+                this._animationUpdateHandle = requestAnimationFrame(updateFrame);
+            } else {
+                this._animationUpdateHandle = null;
+                this._updatePlayButtonState();
+            }
+        };
+
+        this._animationUpdateHandle = requestAnimationFrame(updateFrame);
     }
 }

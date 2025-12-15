@@ -252,20 +252,57 @@ export class BoneController {
       (skeleton as unknown as { bones?: unknown[] }).bones || [];
         let appliedCount = 0;
 
+        // Log hand bones from VPD for debugging
+        const handBones = vpdBones.filter(
+            (b) =>
+                b.name.includes("手") ||
+        b.name.includes("Hand") ||
+        b.name.includes("腕") ||
+        b.name.includes("Arm")
+        );
+        if (handBones.length > 0) {
+            console.log(
+                "Hand-related bones in VPD:",
+                handBones.map((b) => ({
+                    name: b.name,
+                    pos: `(${b.position.x.toFixed(2)}, ${b.position.y.toFixed(
+                        2
+                    )}, ${b.position.z.toFixed(2)})`,
+                    rot: `(${b.rotation.x.toFixed(3)}, ${b.rotation.y.toFixed(
+                        3
+                    )}, ${b.rotation.z.toFixed(3)}, ${b.rotation.w.toFixed(3)})`
+                }))
+            );
+        }
+
         for (const vpdBone of vpdBones) {
             // Find the metadata bone by name (Japanese bone name)
             const metadataBone = metadata.bones.find((b) => b.name === vpdBone.name);
 
             if (!metadataBone) {
-                console.warn(`VPD bone not found in model: "${vpdBone.name}"`);
-                continue;
+                // Try matching with "D" suffix fallback (babylon-mmd rendering bones)
+                const fallbackBone = metadata.bones.find(
+                    (b) => b.name === vpdBone.name + "D"
+                );
+                if (!fallbackBone) {
+                    console.warn(`VPD bone not found in model: "${vpdBone.name}"`);
+                    continue;
+                }
             }
 
             // Find the skeleton bone by name
-            const skeletonBone = skeletonBones.find((b) => {
+            let skeletonBone = skeletonBones.find((b) => {
                 const boneObj = b as unknown as { name: string };
                 return boneObj.name === vpdBone.name;
             });
+
+            // Try "D" suffix fallback for skeleton bone
+            if (!skeletonBone) {
+                skeletonBone = skeletonBones.find((b) => {
+                    const boneObj = b as unknown as { name: string };
+                    return boneObj.name === vpdBone.name + "D";
+                });
+            }
 
             if (!skeletonBone) {
                 console.warn(`Skeleton bone not found for: "${vpdBone.name}"`);
@@ -291,7 +328,17 @@ export class BoneController {
             boneMod.setRotationQuaternion(vpdBone.rotation.clone());
             appliedCount += 1;
 
-            console.log(`Applied pose to bone: "${vpdBone.name}"`);
+            if (handBones.some((b) => b.name === vpdBone.name)) {
+                console.log(
+                    `Applied hand bone: "${
+                        vpdBone.name
+                    }" to skeleton bone (rotation: ${vpdBone.rotation.x.toFixed(
+                        3
+                    )}, ${vpdBone.rotation.y.toFixed(3)}, ${vpdBone.rotation.z.toFixed(
+                        3
+                    )}, ${vpdBone.rotation.w.toFixed(3)})`
+                );
+            }
         }
 
         console.log(`Applied ${appliedCount} bones from VPD pose`);
