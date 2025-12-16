@@ -296,9 +296,21 @@ export class BonePoseUI {
                   "#first-model-morph-vmd"
               ) as HTMLInputElement
                         )?.files?.[0];
-                        await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                        const mouthFile = (
+              vmdContainer.querySelector(
+                  "#first-model-mouth-vmd"
+              ) as HTMLInputElement
+                        )?.files?.[0];
+                        const eyeFile = (
+              vmdContainer.querySelector(
+                  "#first-model-eye-vmd"
+              ) as HTMLInputElement
+                        )?.files?.[0];
+                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
                             motionFile,
                             morphFile || null,
+                            mouthFile || null,
+                            eyeFile || null,
                             0
                         );
                         // Update animation UI
@@ -338,15 +350,23 @@ export class BonePoseUI {
             "#first-model-motion-vmd"
         ) as HTMLInputElement
             )?.files?.[0];
+            const mouthFile = (
+        vmdContainer.querySelector("#first-model-mouth-vmd") as HTMLInputElement
+            )?.files?.[0];
+            const eyeFile = (
+        vmdContainer.querySelector("#first-model-eye-vmd") as HTMLInputElement
+            )?.files?.[0];
 
             if (morphFile) {
                 try {
                     if (this._vmdAnimationController) {
                         if (motionFile) {
                             // Both motion and morphs loaded
-                            await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                            await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
                                 motionFile,
                                 morphFile,
+                                mouthFile || null,
+                                eyeFile || null,
                                 0
                             );
                             this._updateAnimationControls();
@@ -369,6 +389,112 @@ export class BonePoseUI {
 
         vmdContainer.appendChild(morphLabel);
         vmdContainer.appendChild(morphFileInput);
+
+        // Add mouth motion import for first model
+        const mouthLabel = document.createElement("label");
+        mouthLabel.textContent = "Load Mouth Motion VMD (Optional):";
+        mouthLabel.style.display = "block";
+        mouthLabel.style.marginBottom = "8px";
+        mouthLabel.style.fontWeight = "bold";
+
+        const mouthFileInput = document.createElement("input");
+        mouthFileInput.type = "file";
+        mouthFileInput.accept = ".vmd";
+        mouthFileInput.id = "first-model-mouth-vmd";
+        mouthFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        mouthFileInput.addEventListener("change", async(e) => {
+            const mouthFile = (e.target as HTMLInputElement).files?.[0];
+            const motionFile = (
+        vmdContainer.querySelector(
+            "#first-model-motion-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const morphFile = (
+        vmdContainer.querySelector("#first-model-morph-vmd") as HTMLInputElement
+            )?.files?.[0];
+            const eyeFile = (
+        vmdContainer.querySelector("#first-model-eye-vmd") as HTMLInputElement
+            )?.files?.[0];
+
+            if (mouthFile && motionFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
+                            motionFile,
+                            morphFile || null,
+                            mouthFile,
+                            eyeFile || null,
+                            0
+                        );
+                        this._updateAnimationControls();
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load mouth motion:", error);
+                    alert("Failed to load mouth motion. Check console for details.");
+                }
+            }
+        });
+
+        vmdContainer.appendChild(mouthLabel);
+        vmdContainer.appendChild(mouthFileInput);
+
+        // Add eye motion import for first model
+        const eyeLabel = document.createElement("label");
+        eyeLabel.textContent = "Load Eye Motion VMD (Optional):";
+        eyeLabel.style.display = "block";
+        eyeLabel.style.marginBottom = "8px";
+        eyeLabel.style.fontWeight = "bold";
+
+        const eyeFileInput = document.createElement("input");
+        eyeFileInput.type = "file";
+        eyeFileInput.accept = ".vmd";
+        eyeFileInput.id = "first-model-eye-vmd";
+        eyeFileInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        eyeFileInput.addEventListener("change", async(e) => {
+            const eyeFile = (e.target as HTMLInputElement).files?.[0];
+            const motionFile = (
+        vmdContainer.querySelector(
+            "#first-model-motion-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const morphFile = (
+        vmdContainer.querySelector("#first-model-morph-vmd") as HTMLInputElement
+            )?.files?.[0];
+            const mouthFile = (
+        vmdContainer.querySelector("#first-model-mouth-vmd") as HTMLInputElement
+            )?.files?.[0];
+
+            if (eyeFile && motionFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
+                            motionFile,
+                            morphFile || null,
+                            mouthFile || null,
+                            eyeFile,
+                            0
+                        );
+                        this._updateAnimationControls();
+                    } else {
+                        alert(
+                            "Animation controller not initialized. Please reload the page."
+                        );
+                    }
+                } catch (error) {
+                    console.error("Failed to load eye motion:", error);
+                    alert("Failed to load eye motion. Check console for details.");
+                }
+            }
+        });
+
+        vmdContainer.appendChild(eyeLabel);
+        vmdContainer.appendChild(eyeFileInput);
 
         // Add camera motion loading section
         const cameraMotionLabel = document.createElement("label");
@@ -924,13 +1050,25 @@ export class BonePoseUI {
             "#second-model-morph-vmd"
         ) as HTMLInputElement
             )?.files?.[0];
+            const mouthFile = (
+        secondModelContainer.querySelector(
+            "#second-model-mouth-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const eyeFile = (
+        secondModelContainer.querySelector(
+            "#second-model-eye-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
 
             if (motionFile) {
                 try {
                     if (this._vmdAnimationController) {
-                        await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
                             motionFile,
                             morphFile || null,
+                            mouthFile || null,
+                            eyeFile || null,
                             secondModelIndex
                         );
                         alert("Animation loaded for second model successfully!");
@@ -968,15 +1106,27 @@ export class BonePoseUI {
             "#second-model-motion-vmd"
         ) as HTMLInputElement
             )?.files?.[0];
+            const mouthFile = (
+        secondModelContainer.querySelector(
+            "#second-model-mouth-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const eyeFile = (
+        secondModelContainer.querySelector(
+            "#second-model-eye-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
 
             if (morphFile) {
                 try {
                     if (this._vmdAnimationController) {
                         if (motionFile) {
                             // Both motion and morphs loaded
-                            await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                            await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
                                 motionFile,
                                 morphFile,
+                                mouthFile || null,
+                                eyeFile || null,
                                 secondModelIndex
                             );
                         } else {
@@ -999,6 +1149,117 @@ export class BonePoseUI {
 
         secondModelContainer.appendChild(secondModelMorphLabel);
         secondModelContainer.appendChild(secondModelMorphInput);
+
+        // Add mouth motion import for second model
+        const secondModelMouthLabel = document.createElement("label");
+        secondModelMouthLabel.textContent = "Load Mouth Motion VMD (Optional):";
+        secondModelMouthLabel.style.display = "block";
+        secondModelMouthLabel.style.marginBottom = "8px";
+        secondModelMouthLabel.style.fontWeight = "bold";
+
+        const secondModelMouthInput = document.createElement("input");
+        secondModelMouthInput.type = "file";
+        secondModelMouthInput.accept = ".vmd";
+        secondModelMouthInput.id = "second-model-mouth-vmd";
+        secondModelMouthInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        secondModelMouthInput.addEventListener("change", async(e) => {
+            const mouthFile = (e.target as HTMLInputElement).files?.[0];
+            const motionFile = (
+        secondModelContainer.querySelector(
+            "#second-model-motion-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const morphFile = (
+        secondModelContainer.querySelector(
+            "#second-model-morph-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const eyeFile = (
+        secondModelContainer.querySelector(
+            "#second-model-eye-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+
+            if (mouthFile && motionFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
+                            motionFile,
+                            morphFile || null,
+                            mouthFile,
+                            eyeFile || null,
+                            secondModelIndex
+                        );
+                        alert("Animation loaded for second model successfully!");
+                    } else {
+                        alert("Animation controller not initialized.");
+                    }
+                } catch (error) {
+                    console.error("Failed to load mouth motion for second model:", error);
+                    alert("Failed to load mouth motion. Check console for details.");
+                }
+            }
+        });
+
+        secondModelContainer.appendChild(secondModelMouthLabel);
+        secondModelContainer.appendChild(secondModelMouthInput);
+
+        // Add eye motion import for second model
+        const secondModelEyeLabel = document.createElement("label");
+        secondModelEyeLabel.textContent = "Load Eye Motion VMD (Optional):";
+        secondModelEyeLabel.style.display = "block";
+        secondModelEyeLabel.style.marginBottom = "8px";
+        secondModelEyeLabel.style.fontWeight = "bold";
+
+        const secondModelEyeInput = document.createElement("input");
+        secondModelEyeInput.type = "file";
+        secondModelEyeInput.accept = ".vmd";
+        secondModelEyeInput.id = "second-model-eye-vmd";
+        secondModelEyeInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+
+        secondModelEyeInput.addEventListener("change", async(e) => {
+            const eyeFile = (e.target as HTMLInputElement).files?.[0];
+            const motionFile = (
+        secondModelContainer.querySelector(
+            "#second-model-motion-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const morphFile = (
+        secondModelContainer.querySelector(
+            "#second-model-morph-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+            const mouthFile = (
+        secondModelContainer.querySelector(
+            "#second-model-mouth-vmd"
+        ) as HTMLInputElement
+            )?.files?.[0];
+
+            if (eyeFile && motionFile) {
+                try {
+                    if (this._vmdAnimationController) {
+                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
+                            motionFile,
+                            morphFile || null,
+                            mouthFile || null,
+                            eyeFile,
+                            secondModelIndex
+                        );
+                        alert("Animation loaded for second model successfully!");
+                    } else {
+                        alert("Animation controller not initialized.");
+                    }
+                } catch (error) {
+                    console.error("Failed to load eye motion for second model:", error);
+                    alert("Failed to load eye motion. Check console for details.");
+                }
+            }
+        });
+
+        secondModelContainer.appendChild(secondModelEyeLabel);
+        secondModelContainer.appendChild(secondModelEyeInput);
+
         this._container.appendChild(secondModelContainer);
     }
 }

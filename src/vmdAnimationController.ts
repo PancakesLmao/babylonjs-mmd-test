@@ -1,10 +1,15 @@
 import "babylon-mmd/esm/Loader/pmxLoader";
+import "babylon-mmd/esm/Runtime/Animation/mmdCompositeRuntimeModelAnimation";
 
 import type { ShadowGenerator } from "@babylonjs/core/Lights/Shadows/shadowGenerator";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
 import type { Scene } from "@babylonjs/core/scene";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { VmdLoader } from "babylon-mmd/esm/Loader/vmdLoader";
+import {
+    MmdAnimationSpan,
+    MmdCompositeAnimation
+} from "babylon-mmd/esm/Runtime/Animation/mmdCompositeAnimation";
 import { StreamAudioPlayer } from "babylon-mmd/esm/Runtime/Audio/streamAudioPlayer";
 import type { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
@@ -253,11 +258,19 @@ export class VmdAnimationController {
             // Get the MMD model from runtime (first model)
             const mmdModel = (this._mmdRuntime as any).models?.[0];
             if (mmdModel) {
-                // Create runtime animation for the model
-                const modelAnimationHandle =
-          mmdModel.createRuntimeAnimation(mmdAnimation);
-                mmdModel.setRuntimeAnimation(modelAnimationHandle);
-                console.log("Model animation applied");
+                // Add animation to the blender instead of replacing it
+                const blender = this._modelBlenders.get(mmdModel);
+                if (blender) {
+                    const animationName = file.name.replace(/\.[^.]+$/, "");
+                    // Pass raw animation data - AnimationBlender handles createRuntimeAnimation
+                    blender.addAnimationLayer(animationName, mmdAnimation, 1.0);
+                    console.log(`Model animation "${animationName}" added to blender`);
+                } else {
+                    // Fallback if blender doesn't exist
+                    const modelAnimationHandle =
+            mmdModel.createRuntimeAnimation(mmdAnimation);
+                    mmdModel.setRuntimeAnimation(modelAnimationHandle);
+                }
             } else {
                 console.warn("No MMD model found in runtime");
             }
@@ -340,10 +353,19 @@ export class VmdAnimationController {
                 !!(mmdAnimation as any).cameraAnimation
             );
 
-            // Apply animation to the specific model
-            const modelAnimationHandle =
-        targetModel.createRuntimeAnimation(mmdAnimation);
-            targetModel.setRuntimeAnimation(modelAnimationHandle);
+            // Add animation to the blender instead of replacing it
+            const blender = this._modelBlenders.get(targetModel);
+            if (blender) {
+                const animationName = file.name.replace(/\.[^.]+$/, "");
+                // Pass raw animation data - AnimationBlender handles createRuntimeAnimation
+                blender.addAnimationLayer(animationName, mmdAnimation, 1.0);
+                console.log(`Animation "${animationName}" added to blender for model`);
+            } else {
+                // Fallback if blender doesn't exist
+                const modelAnimationHandle =
+          targetModel.createRuntimeAnimation(mmdAnimation);
+                targetModel.setRuntimeAnimation(modelAnimationHandle);
+            }
 
             // Store animation for this model
             this._modelAnimations.set(targetModel, mmdAnimation);
@@ -414,9 +436,25 @@ export class VmdAnimationController {
 
             console.log("Motion VMD loaded successfully for model", modelIndex);
 
-            let finalAnimation: any = motionAnimation;
+            // Create composite animation to hold both motion and facial expression
+            const compositeName = `${motionFile.name.replace(
+                /\.[^.]+$/,
+                ""
+            )}_composite`;
+            const compositeAnimation = new MmdCompositeAnimation(compositeName);
 
-            // Load and merge morph animation if provided
+            // Add motion animation as first span
+            const motionSpan = new MmdAnimationSpan(
+                motionAnimation,
+                undefined, // startFrame - use animation's default
+                undefined, // endFrame - use animation's default
+                0, // offset - start at frame 0
+                1.0 // weight - full weight for motion
+            );
+            compositeAnimation.addSpan(motionSpan);
+            console.log("Motion animation span added to composite");
+
+            // Load and add facial expression animation if provided
             if (morphFile && morphFile.name.toLowerCase().endsWith(".vmd")) {
                 console.log(
                     "Loading facial expression VMD for model",
@@ -425,48 +463,38 @@ export class VmdAnimationController {
                     morphFile.name
                 );
 
-                const morphAnimation = (await loader.loadAsync(
+                const morphAnimation = await loader.loadAsync(
                     morphFile.name.replace(/\.[^.]+$/, ""),
                     morphFile
-                )) as any;
+                );
 
                 console.log(
                     "Facial expression VMD loaded successfully for model",
                     modelIndex
                 );
 
-                // Merge morph data BEFORE creating runtime animation
-                const motionAnimationAny = motionAnimation as any;
-                if (morphAnimation.morphAnimation) {
-                    if (!motionAnimationAny.morphAnimation) {
-                        motionAnimationAny.morphAnimation = morphAnimation.morphAnimation;
-                    } else {
-                        // Merge morph keyframes from facial expression into motion
-                        const motionMorphs = motionAnimationAny.morphAnimation;
-                        const morphMorphs = morphAnimation.morphAnimation;
-
-                        // Copy morph data
-                        for (const morphName in morphMorphs) {
-                            motionMorphs[morphName] = morphMorphs[morphName];
-                        }
-                    }
-                    console.log(
-                        "Facial expression merged with motion animation for model",
-                        modelIndex
-                    );
-                }
-
-                finalAnimation = motionAnimation;
+                // Add facial expression animation as second span
+                const morphSpan = new MmdAnimationSpan(
+                    morphAnimation,
+                    undefined, // startFrame - use animation's default
+                    undefined, // endFrame - use animation's default
+                    0, // offset - start at frame 0
+                    1.0 // weight - full weight for facial expression
+                );
+                compositeAnimation.addSpan(morphSpan);
+                console.log("Facial expression animation span added to composite");
             }
 
-            // Apply the final animation (motion + merged morphs) to the model
-            const modelAnimationHandle =
-        targetModel.createRuntimeAnimation(finalAnimation);
-            targetModel.setRuntimeAnimation(modelAnimationHandle);
-            console.log("Animation applied to model", modelIndex);
+            // Create runtime animation from composite
+            const compositeAnimationHandle =
+        targetModel.createRuntimeAnimation(compositeAnimation);
 
-            // Store animation for this model
-            this._modelAnimations.set(targetModel, finalAnimation);
+            // Set the composite animation on the model
+            targetModel.setRuntimeAnimation(compositeAnimationHandle);
+            console.log("Composite animation applied to model", modelIndex);
+
+            // Store composite animation for this model
+            this._modelAnimations.set(targetModel, compositeAnimation);
 
             console.log("Animation loaded successfully for model", modelIndex);
         } catch (error) {
@@ -490,6 +518,352 @@ export class VmdAnimationController {
 
             console.error(
                 "Failed to load VMD animation with morphs for model. Error:",
+                errorMsg
+            );
+            if (error instanceof Error && error.stack) {
+                console.error("Stack trace:", error.stack);
+            }
+            throw error;
+        }
+    }
+
+    public async loadVmdForModelWithMorphsAndMouth(
+        motionFile: File,
+        morphFile: File | null,
+        mouthFile: File | null,
+        modelIndex: number
+    ): Promise<void> {
+        try {
+            if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+                throw new Error(`Invalid model index: ${modelIndex}`);
+            }
+
+            const targetModel = this._loadedModels[modelIndex];
+
+            // Validate motion file is a VMD file
+            if (!motionFile.name.toLowerCase().endsWith(".vmd")) {
+                throw new Error(
+                    `Invalid motion file type. Expected .vmd file, got ${motionFile.name}`
+                );
+            }
+
+            const loader = new VmdLoader(this._scene);
+            loader.loggingEnabled = true;
+
+            console.log(
+                "Loading motion VMD for model",
+                modelIndex,
+                "from:",
+                motionFile.name
+            );
+
+            // Load motion animation
+            const motionAnimation = await loader.loadAsync(
+                motionFile.name.replace(/\.[^.]+$/, ""),
+                motionFile
+            );
+
+            console.log("Motion VMD loaded successfully for model", modelIndex);
+
+            // Create composite animation to hold multiple animations
+            const compositeName = `${motionFile.name.replace(
+                /\.[^.]+$/,
+                ""
+            )}_composite`;
+            const compositeAnimation = new MmdCompositeAnimation(compositeName);
+
+            // Add motion animation as first span
+            const motionSpan = new MmdAnimationSpan(
+                motionAnimation,
+                undefined, // startFrame - use animation's default
+                undefined, // endFrame - use animation's default
+                0, // offset - start at frame 0
+                1.0 // weight - full weight for motion
+            );
+            compositeAnimation.addSpan(motionSpan);
+            console.log("Motion animation span added to composite");
+
+            // Load and add facial expression animation if provided
+            if (morphFile && morphFile.name.toLowerCase().endsWith(".vmd")) {
+                console.log(
+                    "Loading facial expression VMD for model",
+                    modelIndex,
+                    "from:",
+                    morphFile.name
+                );
+
+                const morphAnimation = await loader.loadAsync(
+                    morphFile.name.replace(/\.[^.]+$/, ""),
+                    morphFile
+                );
+
+                console.log(
+                    "Facial expression VMD loaded successfully for model",
+                    modelIndex
+                );
+
+                // Add facial expression animation as second span
+                const morphSpan = new MmdAnimationSpan(
+                    morphAnimation,
+                    undefined, // startFrame - use animation's default
+                    undefined, // endFrame - use animation's default
+                    0, // offset - start at frame 0
+                    1.0 // weight - full weight for facial expression
+                );
+                compositeAnimation.addSpan(morphSpan);
+                console.log("Facial expression animation span added to composite");
+            }
+
+            // Load and add mouth animation if provided
+            if (mouthFile && mouthFile.name.toLowerCase().endsWith(".vmd")) {
+                console.log(
+                    "Loading mouth motion VMD for model",
+                    modelIndex,
+                    "from:",
+                    mouthFile.name
+                );
+
+                const mouthAnimation = await loader.loadAsync(
+                    mouthFile.name.replace(/\.[^.]+$/, ""),
+                    mouthFile
+                );
+
+                console.log(
+                    "Mouth motion VMD loaded successfully for model",
+                    modelIndex
+                );
+
+                // Add mouth animation as third span
+                const mouthSpan = new MmdAnimationSpan(
+                    mouthAnimation,
+                    undefined, // startFrame - use animation's default
+                    undefined, // endFrame - use animation's default
+                    0, // offset - start at frame 0
+                    1.0 // weight - full weight for mouth animation
+                );
+                compositeAnimation.addSpan(mouthSpan);
+                console.log("Mouth motion animation span added to composite");
+            }
+
+            // Create runtime animation from composite
+            const compositeAnimationHandle =
+        targetModel.createRuntimeAnimation(compositeAnimation);
+
+            // Set the composite animation on the model
+            targetModel.setRuntimeAnimation(compositeAnimationHandle);
+            console.log("Composite animation applied to model", modelIndex);
+
+            // Store composite animation for this model
+            this._modelAnimations.set(targetModel, compositeAnimation);
+
+            console.log("Animation loaded successfully for model", modelIndex);
+        } catch (error) {
+            // Extract the actual error message from babylon-mmd's error object
+            let errorMsg = "Unknown error";
+
+            if (error instanceof Error) {
+                errorMsg = error.message;
+            } else if (typeof error === "object" && error !== null) {
+                const errorObj = error as any;
+                if (errorObj.exception instanceof Error) {
+                    errorMsg = errorObj.exception.message;
+                } else if (errorObj.exception) {
+                    errorMsg = String(errorObj.exception);
+                } else {
+                    errorMsg = JSON.stringify(error);
+                }
+            } else {
+                errorMsg = String(error);
+            }
+
+            console.error(
+                "Failed to load VMD animation with morphs and mouth for model. Error:",
+                errorMsg
+            );
+            if (error instanceof Error && error.stack) {
+                console.error("Stack trace:", error.stack);
+            }
+            throw error;
+        }
+    }
+
+    public async loadVmdForModelWithMorphsMouthAndEye(
+        motionFile: File,
+        morphFile: File | null,
+        mouthFile: File | null,
+        eyeFile: File | null,
+        modelIndex: number
+    ): Promise<void> {
+        try {
+            if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+                throw new Error(`Invalid model index: ${modelIndex}`);
+            }
+
+            const targetModel = this._loadedModels[modelIndex];
+
+            // Validate motion file is a VMD file
+            if (!motionFile.name.toLowerCase().endsWith(".vmd")) {
+                throw new Error(
+                    `Invalid motion file type. Expected .vmd file, got ${motionFile.name}`
+                );
+            }
+
+            const loader = new VmdLoader(this._scene);
+            loader.loggingEnabled = true;
+
+            console.log(
+                "Loading motion VMD for model",
+                modelIndex,
+                "from:",
+                motionFile.name
+            );
+
+            // Load motion animation
+            const motionAnimation = await loader.loadAsync(
+                motionFile.name.replace(/\.[^.]+$/, ""),
+                motionFile
+            );
+
+            console.log("Motion VMD loaded successfully for model", modelIndex);
+
+            // Create composite animation to hold multiple animations
+            const compositeName = `${motionFile.name.replace(
+                /\.[^.]+$/,
+                ""
+            )}_composite`;
+            const compositeAnimation = new MmdCompositeAnimation(compositeName);
+
+            // Add motion animation as first span
+            const motionSpan = new MmdAnimationSpan(
+                motionAnimation,
+                undefined,
+                undefined,
+                0,
+                1.0
+            );
+            compositeAnimation.addSpan(motionSpan);
+            console.log("Motion animation span added to composite");
+
+            // Load and add facial expression animation if provided
+            if (morphFile && morphFile.name.toLowerCase().endsWith(".vmd")) {
+                console.log(
+                    "Loading facial expression VMD for model",
+                    modelIndex,
+                    "from:",
+                    morphFile.name
+                );
+
+                const morphAnimation = await loader.loadAsync(
+                    morphFile.name.replace(/\.[^.]+$/, ""),
+                    morphFile
+                );
+
+                console.log(
+                    "Facial expression VMD loaded successfully for model",
+                    modelIndex
+                );
+
+                const morphSpan = new MmdAnimationSpan(
+                    morphAnimation,
+                    undefined,
+                    undefined,
+                    0,
+                    1.0
+                );
+                compositeAnimation.addSpan(morphSpan);
+                console.log("Facial expression animation span added to composite");
+            }
+
+            // Load and add mouth animation if provided
+            if (mouthFile && mouthFile.name.toLowerCase().endsWith(".vmd")) {
+                console.log(
+                    "Loading mouth motion VMD for model",
+                    modelIndex,
+                    "from:",
+                    mouthFile.name
+                );
+
+                const mouthAnimation = await loader.loadAsync(
+                    mouthFile.name.replace(/\.[^.]+$/, ""),
+                    mouthFile
+                );
+
+                console.log(
+                    "Mouth motion VMD loaded successfully for model",
+                    modelIndex
+                );
+
+                const mouthSpan = new MmdAnimationSpan(
+                    mouthAnimation,
+                    undefined,
+                    undefined,
+                    0,
+                    1.0
+                );
+                compositeAnimation.addSpan(mouthSpan);
+                console.log("Mouth motion animation span added to composite");
+            }
+
+            // Load and add eye animation if provided
+            if (eyeFile && eyeFile.name.toLowerCase().endsWith(".vmd")) {
+                console.log(
+                    "Loading eye motion VMD for model",
+                    modelIndex,
+                    "from:",
+                    eyeFile.name
+                );
+
+                const eyeAnimation = await loader.loadAsync(
+                    eyeFile.name.replace(/\.[^.]+$/, ""),
+                    eyeFile
+                );
+
+                console.log("Eye motion VMD loaded successfully for model", modelIndex);
+
+                const eyeSpan = new MmdAnimationSpan(
+                    eyeAnimation,
+                    undefined,
+                    undefined,
+                    0,
+                    1.0
+                );
+                compositeAnimation.addSpan(eyeSpan);
+                console.log("Eye motion animation span added to composite");
+            }
+
+            // Create runtime animation from composite
+            const compositeAnimationHandle =
+        targetModel.createRuntimeAnimation(compositeAnimation);
+
+            // Set the composite animation on the model
+            targetModel.setRuntimeAnimation(compositeAnimationHandle);
+            console.log("Composite animation applied to model", modelIndex);
+
+            // Store composite animation for this model
+            this._modelAnimations.set(targetModel, compositeAnimation);
+
+            console.log("Animation loaded successfully for model", modelIndex);
+        } catch (error) {
+            // Extract the actual error message from babylon-mmd's error object
+            let errorMsg = "Unknown error";
+
+            if (error instanceof Error) {
+                errorMsg = error.message;
+            } else if (typeof error === "object" && error !== null) {
+                const errorObj = error as any;
+                if (errorObj.exception instanceof Error) {
+                    errorMsg = errorObj.exception.message;
+                } else if (errorObj.exception) {
+                    errorMsg = String(errorObj.exception);
+                } else {
+                    errorMsg = JSON.stringify(error);
+                }
+            } else {
+                errorMsg = String(error);
+            }
+
+            console.error(
+                "Failed to load VMD animation with morphs, mouth and eye for model. Error:",
                 errorMsg
             );
             if (error instanceof Error && error.stack) {

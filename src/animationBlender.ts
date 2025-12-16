@@ -54,8 +54,10 @@ export class AnimationBlender {
         this._animationLayers.push(layer);
         console.log(`Animation layer "${name}" added with weight ${layer.weight}`);
 
-        // Apply blended animation
-        this._applyBlendedAnimation();
+        // Apply the animation immediately since babylon-mmd only supports one at a time
+        // When a new layer is added, it replaces the previous one (standard MMD behavior)
+        this._model.setRuntimeAnimation(runtimeHandle);
+        console.log(`Animation layer "${name}" applied to model`);
     }
 
     /**
