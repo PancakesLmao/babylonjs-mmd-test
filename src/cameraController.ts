@@ -25,7 +25,11 @@ export class CameraController {
     private _cameraRotationX = 0;
     private _cameraRotationY = 0;
     private _cameraDistance = 10;
-    private readonly _cameraTarget = { x: 0, y: 10, z: 0 };
+    private readonly _cameraTarget: { x: number; y: number; z: number } = {
+        x: 0,
+        y: 10,
+        z: 0
+    };
     private _animationFrameId: number | null = null;
     private readonly _moveSpeed = 0.2;
     private _isLeftMouseDown = false;
@@ -33,6 +37,24 @@ export class CameraController {
     public constructor(camera: MmdCamera) {
         this._camera = camera;
         this._defaultState = this._captureState();
+
+        // Capture babylon-mmd's initial camera state to avoid jumping
+        const mmdCamera = camera as any;
+        if (mmdCamera.rotation) {
+            this._cameraRotationX = mmdCamera.rotation.x ?? 0;
+            this._cameraRotationY = mmdCamera.rotation.y ?? 0;
+        }
+        if (mmdCamera.distance !== undefined) {
+            this._cameraDistance = mmdCamera.distance;
+        }
+        console.log(
+            `Captured initial babylon-mmd camera state: rotX=${this._cameraRotationX.toFixed(
+                2
+            )}, rotY=${this._cameraRotationY.toFixed(
+                2
+            )}, distance=${this._cameraDistance.toFixed(2)}`
+        );
+
         this._initializeMouseControls();
     }
 
@@ -137,16 +159,11 @@ export class CameraController {
     }
 
     private _onMouseMove(event: PointerEvent): void {
-    // Only rotate if left mouse button is held
-        if (!this._isLeftMouseDown) {
-            return;
-        }
+        if (!this._isLeftMouseDown) return;
 
-        // Calculate mouse movement delta
         const deltaX = event.movementX || 0;
         const deltaY = event.movementY || 0;
 
-        // Rotate camera based on mouse movement
         const rotationSpeed = 0.0008;
         this._cameraRotationY -= deltaX * rotationSpeed;
         this._cameraRotationX -= deltaY * rotationSpeed;
@@ -209,6 +226,7 @@ export class CameraController {
 
     private _onMouseWheel(event: WheelEvent): void {
         event.preventDefault();
+
         // Scroll up = zoom in (decrease distance), scroll down = zoom out (increase distance)
         const zoomSpeed = 1.5;
         this._cameraDistance += event.deltaY > 0 ? zoomSpeed : -zoomSpeed;

@@ -997,6 +997,42 @@ export class VmdAnimationController {
         console.log("VMD animation playback paused");
     }
 
+    public simpleReset(): void {
+        this._isPlaying = false;
+        const mmdRuntime = this._mmdRuntime as any;
+
+        // Reset to frame 0
+        mmdRuntime.animationTimelineCurrentFrameIndex = 0;
+        mmdRuntime.pauseAnimation(true);
+
+        // Get the MMD model and reapply animation
+        const mmdModel = mmdRuntime.models?.[0];
+        if (mmdModel && this._mmdAnimation) {
+            // Recreate animation to reset babylon-mmd's internal state
+            const modelAnimationHandle = mmdModel.createRuntimeAnimation(
+                this._mmdAnimation
+            );
+            mmdModel.setRuntimeAnimation(modelAnimationHandle);
+
+            // Reapply camera animation if available
+            if (this._mmdCamera && (this._mmdAnimation as any).cameraAnimation) {
+                const cameraAnimationHandle = this._mmdCamera.createRuntimeAnimation(
+                    (this._mmdAnimation as any).cameraAnimation
+                );
+                this._mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
+            }
+        }
+
+        // Force one frame update to apply the reset
+        mmdRuntime.pauseAnimation(false);
+        setTimeout(() => {
+            mmdRuntime.pauseAnimation(true);
+            mmdRuntime.animationTimelineCurrentFrameIndex = 0;
+        }, 16); // ~1 frame at 60fps
+
+        console.log("VMD animation reset to frame 0");
+    }
+
     public stop(): void {
         this._isPlaying = false;
         (this._mmdRuntime as any).pauseAnimation(true);
