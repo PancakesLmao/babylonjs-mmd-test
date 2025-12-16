@@ -103,7 +103,7 @@ export class SceneBuilder implements ISceneBuilder {
         physicsRuntime.addRigidBodyToGlobal(groundBody);
 
         const modelMesh = await LoadAssetContainerAsync(
-            "res/models/galleon/galleon_ver2.00/galleon.pmx",
+            "res/models/Manhattan_Casual/Manhattan.pmx",
             scene,
             {
                 pluginOptions: {
@@ -129,6 +129,7 @@ export class SceneBuilder implements ISceneBuilder {
             mmdRuntime
         );
         vmdAnimationController.setMmdCamera(mmdCamera);
+        vmdAnimationController.setCameraController(cameraController);
         vmdAnimationController.setShadowGenerator(shadowGenerator);
         // Register the initial model
         vmdAnimationController.registerInitialModel(modelMesh);

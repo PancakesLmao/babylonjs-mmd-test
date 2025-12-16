@@ -11,6 +11,10 @@ import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
 import type { MmdModel } from "babylon-mmd/esm/Runtime/mmdModel";
 import type { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
 
+import { AnimationBlender } from "./animationBlender";
+import type { CameraController } from "./cameraController";
+import { HumanoidRetargeter } from "./humanoidRetargeter";
+
 export class VmdAnimationController {
     private readonly _scene: Scene;
     private readonly _mmdRuntime: MmdRuntime;
@@ -21,10 +25,18 @@ export class VmdAnimationController {
     private _shadowGenerator: ShadowGenerator | null = null;
     private readonly _loadedModels: MmdModel[] = []; // Track all loaded models
     private readonly _modelAnimations: Map<MmdModel, any> = new Map(); // Store animations per model
+    private readonly _modelBlenders: Map<MmdModel, AnimationBlender> = new Map(); // Animation blenders per model
+    private readonly _modelRetargeters: Map<MmdModel, HumanoidRetargeter> =
+        new Map(); // Humanoid retargeters per model
+    private _cameraController: CameraController | null = null;
 
     public constructor(scene: Scene, mmdRuntime: MmdRuntime) {
         this._scene = scene;
         this._mmdRuntime = mmdRuntime;
+    }
+
+    public setCameraController(cameraController: CameraController): void {
+        this._cameraController = cameraController;
     }
 
     public setMmdCamera(mmdCamera: MmdCamera): void {
@@ -33,6 +45,66 @@ export class VmdAnimationController {
 
     public getLoadedModels(): MmdModel[] {
         return this._loadedModels;
+    }
+
+    public getAnimationBlender(modelIndex: number): AnimationBlender | null {
+        if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+            console.warn(`Invalid model index: ${modelIndex}`);
+            return null;
+        }
+        const model = this._loadedModels[modelIndex];
+        return this._modelBlenders.get(model) || null;
+    }
+
+    public getHumanoidRetargeter(modelIndex: number): HumanoidRetargeter | null {
+        if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+            console.warn(`Invalid model index: ${modelIndex}`);
+            return null;
+        }
+        const model = this._loadedModels[modelIndex];
+        return this._modelRetargeters.get(model) || null;
+    }
+
+    /**
+   * Create or get a Mixamo to MMD retargeter for the specified model.
+   * Useful for applying Mixamo animations to MMD models.
+   */
+    public getOrCreateMixamoToMMDRetargeter(
+        modelIndex: number
+    ): HumanoidRetargeter | null {
+        if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+            console.warn(`Invalid model index: ${modelIndex}`);
+            return null;
+        }
+        const model = this._loadedModels[modelIndex];
+
+        if (!this._modelRetargeters.has(model)) {
+            const retargeter = HumanoidRetargeter.CreateMixamoToMMD(model);
+            this._modelRetargeters.set(model, retargeter);
+        }
+
+        return this._modelRetargeters.get(model) || null;
+    }
+
+    /**
+   * Create or get a MMD to Mixamo retargeter for the specified model.
+   * Useful for applying MMD animations to humanoid models.
+   */
+    public getOrCreateMMDToMixamoRetargeter(
+        modelIndex: number
+    ): HumanoidRetargeter | null {
+        if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+            console.warn(`Invalid model index: ${modelIndex}`);
+            return null;
+        }
+        const model = this._loadedModels[modelIndex];
+
+        if (!this._modelRetargeters.has(model)) {
+            const retargeter = HumanoidRetargeter.CreateMMDToMixamo(model);
+            this._modelRetargeters.set(model, retargeter);
+        }
+
+        return this._modelRetargeters.get(model) || null;
     }
 
     public onModelLoaded(
@@ -49,6 +121,11 @@ export class VmdAnimationController {
     // Register the initial model loaded at startup
         const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
         this._loadedModels.push(mmdModel);
+
+        // Create animation blender for this model
+        const blender = new AnimationBlender(this._mmdRuntime, mmdModel);
+        this._modelBlenders.set(mmdModel, blender);
+
         console.log("Initial model registered with index 0");
     }
 
@@ -80,6 +157,11 @@ export class VmdAnimationController {
             // Register with MmdRuntime and track the created MmdModel
             const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
             this._loadedModels.push(mmdModel);
+
+            // Create animation blender for this model
+            const blender = new AnimationBlender(this._mmdRuntime, mmdModel);
+            this._modelBlenders.set(mmdModel, blender);
+
             console.log("Model loaded successfully:", modelPath);
             return modelMesh;
         } catch (error) {
@@ -447,15 +529,43 @@ export class VmdAnimationController {
                 !!(cameraAnimation as any).cameraAnimation
             );
 
-            if (this._mmdCamera) {
-                // Use the loaded animation as camera animation
-                const cameraAnimationHandle =
-          this._mmdCamera.createRuntimeAnimation(cameraAnimation);
-                this._mmdCamera.setRuntimeAnimation(cameraAnimationHandle);
+            if (this._mmdCamera && this._cameraController) {
+                // Validate camera animation before adding
+                const validation =
+          this._cameraController.validateCameraAnimation(cameraAnimation);
+
+                if (!validation.isValid) {
+                    console.warn(
+                        "Camera animation validation warnings:",
+                        validation.errors
+                    );
+                }
+
+                // Add camera animation with metadata
+                const animationName = file.name.replace(/\.[^.]+$/, "");
+                this._cameraController.addCameraAnimation(
+                    cameraAnimation,
+                    animationName,
+                    1.0
+                );
+
+                // Get animation info
+                const animInfo =
+          this._cameraController.getCameraAnimationInfo(animationName);
+                if (animInfo) {
+                    console.log(
+                        `Camera animation: ${
+                            animInfo.frameCount
+                        } frames, ${animInfo.duration.toFixed(2)}s`
+                    );
+                }
+
                 this._mmdRuntime.addAnimatable(this._mmdCamera);
                 console.log("Camera motion loaded successfully");
             } else {
-                console.warn("Camera not available");
+                console.warn(
+                    "Camera not available or camera controller not initialized"
+                );
             }
         } catch (error) {
             // Extract the actual error message from babylon-mmd's error object
