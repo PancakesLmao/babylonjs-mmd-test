@@ -230,16 +230,7 @@ export class BoneController {
     ): void {
         this._ensureBonesInitialized();
 
-        // Get metadata bones to match by name (Japanese names)
-        const metadata = this._modelMesh.metadata as unknown as {
-      bones?: { name: string; englishName?: string }[];
-    } | null;
-
-        if (!metadata || !Array.isArray(metadata.bones)) {
-            console.warn("No metadata bones available for VPD matching");
-            return;
-        }
-
+        // Get the skeleton from the model
         const skeleton =
       this._modelMesh.skeleton ||
       (this._modelMesh.metadata as unknown as { skeleton?: unknown })?.skeleton;
@@ -276,27 +267,13 @@ export class BoneController {
         }
 
         for (const vpdBone of vpdBones) {
-            // Find the metadata bone by name (Japanese bone name)
-            const metadataBone = metadata.bones.find((b) => b.name === vpdBone.name);
-
-            if (!metadataBone) {
-                // Try matching with "D" suffix fallback (babylon-mmd rendering bones)
-                const fallbackBone = metadata.bones.find(
-                    (b) => b.name === vpdBone.name + "D"
-                );
-                if (!fallbackBone) {
-                    console.warn(`VPD bone not found in model: "${vpdBone.name}"`);
-                    continue;
-                }
-            }
-
-            // Find the skeleton bone by name
+            // Find the skeleton bone by name (direct match)
             let skeletonBone = skeletonBones.find((b) => {
                 const boneObj = b as unknown as { name: string };
                 return boneObj.name === vpdBone.name;
             });
 
-            // Try "D" suffix fallback for skeleton bone
+            // Try "D" suffix fallback for babylon-mmd rendering bones
             if (!skeletonBone) {
                 skeletonBone = skeletonBones.find((b) => {
                     const boneObj = b as unknown as { name: string };
@@ -304,8 +281,17 @@ export class BoneController {
                 });
             }
 
+            // Try without "D" suffix if the VPD bone name has it
+            if (!skeletonBone && vpdBone.name.endsWith("D")) {
+                const boneNameWithoutD = vpdBone.name.slice(0, -1);
+                skeletonBone = skeletonBones.find((b) => {
+                    const boneObj = b as unknown as { name: string };
+                    return boneObj.name === boneNameWithoutD;
+                });
+            }
+
             if (!skeletonBone) {
-                console.warn(`Skeleton bone not found for: "${vpdBone.name}"`);
+                console.debug(`Skeleton bone not found for: "${vpdBone.name}"`);
                 continue;
             }
 

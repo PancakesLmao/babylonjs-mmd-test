@@ -70,87 +70,246 @@ export class BonePoseUI {
         `;
         this._container.appendChild(instructions);
 
-        // Add camera controls section if available
+        // Create separate panels for camera controls at top-left (position) and bottom-left (controls)
         if (this._cameraController) {
-            const cameraContainer = document.createElement("div");
-            cameraContainer.style.marginBottom = "15px";
-            cameraContainer.style.paddingBottom = "15px";
-            cameraContainer.style.borderBottom = "1px solid #555";
+            // Camera Position Display - Top Left
+            const cameraPositionPanel = document.createElement("div");
+            cameraPositionPanel.id = "camera-position-panel";
+            cameraPositionPanel.style.cssText = `
+                position: fixed;
+                top: 10px;
+                left: 10px;
+                background: rgba(0, 0, 0, 0.85);
+                color: white;
+                padding: 12px;
+                border-radius: 8px;
+                font-family: Arial, sans-serif;
+                font-size: 11px;
+                z-index: 1001;
+                border-left: 3px solid #4080b0;
+            `;
+            cameraPositionPanel.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 8px;">Camera Position</div>
+                <div id="camera-pos-display" style="background: rgba(50, 50, 80, 0.4); padding: 8px; border-radius: 4px; font-family: monospace; color: #90ee90;">
+                    Position: X: 0.0 | Y: 10.0 | Z: 0.0
+                </div>
+            `;
+            document.body.appendChild(cameraPositionPanel);
 
-            const cameraTitle = document.createElement("h4");
-            cameraTitle.textContent = "Camera Position";
-            cameraTitle.style.margin = "0 0 10px 0";
-            cameraContainer.appendChild(cameraTitle);
+            // Camera Control UI - Bottom Left
+            const cameraControlPanel = document.createElement("div");
+            cameraControlPanel.id = "camera-control-panel";
+            cameraControlPanel.style.cssText = `
+                position: fixed;
+                bottom: 10px;
+                left: 10px;
+                background: rgba(0, 0, 0, 0.85);
+                color: white;
+                padding: 12px;
+                border-radius: 8px;
+                font-family: Arial, sans-serif;
+                font-size: 11px;
+                z-index: 1001;
+                border-left: 3px solid #4080b0;
+                min-width: 180px;
+            `;
+            cameraControlPanel.innerHTML =
+        "<div style=\"font-weight: bold; margin-bottom: 8px;\">Camera Controls</div>";
+            document.body.appendChild(cameraControlPanel);
 
-            const cameraPos = this._cameraController.getPosition();
-            const axes = ["x", "y", "z"] as const;
+            // Visual controller UI inside the panel
+            const controlUI = document.createElement("div");
+            controlUI.style.cssText = `
+                background: rgba(30, 30, 30, 0.8);
+                padding: 12px;
+                border-radius: 6px;
+            `;
 
-            for (const axis of axes) {
-                const controlDiv = document.createElement("div");
-                controlDiv.style.marginBottom = "8px";
+            // Keyboard visualization
+            const keyboardSection = document.createElement("div");
+            keyboardSection.style.cssText = `
+                margin-bottom: 12px;
+            `;
+            keyboardSection.innerHTML =
+        "<strong style=\"font-size: 10px;\">Movement:</strong>";
 
-                const label = document.createElement("label");
-                label.textContent = axis.toUpperCase();
-                label.style.display = "inline-block";
-                label.style.width = "20px";
-                label.style.fontWeight = "bold";
+            const keyboardViz = document.createElement("div");
+            keyboardViz.style.cssText = `
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 4px;
+                margin-top: 6px;
+            `;
 
-                const input = document.createElement("input");
-                input.type = "range";
-                input.min = "-50";
-                input.max = "50";
-                input.step = "0.5";
-                input.value = cameraPos[axis].toString();
-                input.style.cssText = "width: 160px; vertical-align: middle;";
-                input.dataset.axis = axis;
+            const keys = [
+                { id: "w", label: "W", pos: "grid-column: 2;" },
+                { id: "a", label: "A", pos: "grid-column: 1;" },
+                { id: "s", label: "S", pos: "grid-column: 2;" },
+                { id: "d", label: "D", pos: "grid-column: 3;" }
+            ];
 
-                const valueDisplay = document.createElement("span");
-                valueDisplay.textContent = cameraPos[axis].toFixed(1);
-                valueDisplay.style.marginLeft = "10px";
-                valueDisplay.style.width = "45px";
-                valueDisplay.style.display = "inline-block";
+            const keyElements: { [key: string]: HTMLElement } = {};
 
-                input.addEventListener("input", () => {
-                    const value = parseFloat(input.value);
-                    valueDisplay.textContent = value.toFixed(1);
-          this._cameraController!.moveCamera(axis, value);
+            keys.forEach((key) => {
+                const keyBtn = document.createElement("div");
+                keyBtn.id = `key-${key.id}`;
+                keyBtn.style.cssText = `
+                    ${key.pos}
+                    background: #444;
+                    border: 1px solid #666;
+                    padding: 8px;
+                    border-radius: 4px;
+                    text-align: center;
+                    font-weight: bold;
+                    color: #aaa;
+                    font-size: 10px;
+                    transition: all 0.1s;
+                    cursor: default;
+                `;
+                keyBtn.textContent = key.label;
+                keyboardViz.appendChild(keyBtn);
+                keyElements[key.id] = keyBtn;
+            });
+
+            keyboardSection.appendChild(keyboardViz);
+            controlUI.appendChild(keyboardSection);
+
+            // Space and Shift keys
+            const verticalSection = document.createElement("div");
+            verticalSection.style.cssText = `
+                margin-bottom: 12px;
+            `;
+            verticalSection.innerHTML =
+        "<strong style=\"font-size: 10px;\">Vertical:</strong>";
+
+            const verticalViz = document.createElement("div");
+            verticalViz.style.cssText = `
+                display: flex;
+                gap: 4px;
+                margin-top: 6px;
+            `;
+
+            const spaceBtn = document.createElement("div");
+            spaceBtn.id = "key-space";
+            spaceBtn.style.cssText = `
+                flex: 1;
+                background: #444;
+                border: 1px solid #666;
+                padding: 8px;
+                border-radius: 4px;
+                text-align: center;
+                font-weight: bold;
+                color: #aaa;
+                font-size: 10px;
+                transition: all 0.1s;
+                cursor: default;
+            `;
+            spaceBtn.textContent = "SPACE ↑";
+            keyElements["space"] = spaceBtn;
+            verticalViz.appendChild(spaceBtn);
+
+            const shiftBtn = document.createElement("div");
+            shiftBtn.id = "key-shift";
+            shiftBtn.style.cssText = `
+                flex: 1;
+                background: #444;
+                border: 1px solid #666;
+                padding: 8px;
+                border-radius: 4px;
+                text-align: center;
+                font-weight: bold;
+                color: #aaa;
+                font-size: 10px;
+                transition: all 0.1s;
+                cursor: default;
+            `;
+            shiftBtn.textContent = "SHIFT ↓";
+            keyElements["shift"] = shiftBtn;
+            verticalViz.appendChild(shiftBtn);
+
+            verticalSection.appendChild(verticalViz);
+            controlUI.appendChild(verticalSection);
+
+            // Mouse visualization
+            const mouseSection = document.createElement("div");
+            mouseSection.style.cssText = `
+                margin-bottom: 0;
+            `;
+            mouseSection.innerHTML =
+        "<strong style=\"font-size: 10px;\">Rotation:</strong>";
+
+            const mouseViz = document.createElement("div");
+            mouseViz.id = "mouse-rmb";
+            mouseViz.style.cssText = `
+                background: #444;
+                border: 1px solid #666;
+                padding: 12px;
+                border-radius: 4px;
+                text-align: center;
+                font-weight: bold;
+                color: #aaa;
+                font-size: 11px;
+                margin-top: 6px;
+                transition: all 0.1s;
+                cursor: default;
+            `;
+            mouseViz.textContent = "RMB Drag";
+            keyElements["isRotating"] = mouseViz;
+            mouseSection.appendChild(mouseViz);
+            controlUI.appendChild(mouseSection);
+
+            cameraControlPanel.appendChild(controlUI);
+
+            // Update UI in animation loop
+            const updateControlUI = (): void => {
+                const inputs = this._cameraController!.getInputStates();
+                const pos = this._cameraController!.getCameraTarget();
+
+                // Update key colors
+                Object.entries(inputs).forEach(([key, isActive]) => {
+                    if (key === "isRotating") return;
+                    if (keyElements[key]) {
+                        if (isActive) {
+                            keyElements[key].style.background = "#00aa00";
+                            keyElements[key].style.borderColor = "#00ff00";
+                            keyElements[key].style.color = "#ffffff";
+                            keyElements[key].style.boxShadow = "0 0 8px rgba(0, 255, 0, 0.5)";
+                        } else {
+                            keyElements[key].style.background = "#444";
+                            keyElements[key].style.borderColor = "#666";
+                            keyElements[key].style.color = "#aaa";
+                            keyElements[key].style.boxShadow = "none";
+                        }
+                    }
                 });
 
-                controlDiv.appendChild(label);
-                controlDiv.appendChild(input);
-                controlDiv.appendChild(valueDisplay);
-                cameraContainer.appendChild(controlDiv);
-            }
+                // Update mouse button
+                if (keyElements["isRotating"]) {
+                    if (inputs.isRotating) {
+                        keyElements["isRotating"].style.background = "#aa0000";
+                        keyElements["isRotating"].style.borderColor = "#ff0000";
+                        keyElements["isRotating"].style.color = "#ffffff";
+                        keyElements["isRotating"].style.boxShadow =
+              "0 0 8px rgba(255, 0, 0, 0.5)";
+                    } else {
+                        keyElements["isRotating"].style.background = "#444";
+                        keyElements["isRotating"].style.borderColor = "#666";
+                        keyElements["isRotating"].style.color = "#aaa";
+                        keyElements["isRotating"].style.boxShadow = "none";
+                    }
+                }
 
-            const resetCameraBtn = document.createElement("button");
-            resetCameraBtn.textContent = "Reset Camera";
-            resetCameraBtn.style.cssText = `
-                width: 100%;
-                padding: 8px;
-                margin-top: 10px;
-                background: #666;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            `;
-            resetCameraBtn.addEventListener("click", () => {
-        this._cameraController!.reset();
-        // Update sliders and display
-        const defaultState = this._cameraController!.getDefaultState();
-        const inputs = cameraContainer.querySelectorAll("input[type='range']");
-        inputs.forEach((input, index) => {
-            const axis = ["x", "y", "z"][
-                index
-            ] as keyof typeof defaultState.position;
-            const value = defaultState.position[axis];
-            (input as HTMLInputElement).value = value.toString();
-            (input.nextElementSibling as HTMLElement).textContent =
-            value.toFixed(1);
-        });
-            });
-            cameraContainer.appendChild(resetCameraBtn);
-            this._container.appendChild(cameraContainer);
+                // Update position display
+                const posDisplay = document.getElementById("camera-pos-display");
+                if (posDisplay) {
+                    posDisplay.innerHTML = `Position: X: ${pos.x.toFixed(
+                        1
+                    )} | Y: ${pos.y.toFixed(1)} | Z: ${pos.z.toFixed(1)}`;
+                }
+
+                requestAnimationFrame(updateControlUI);
+            };
+            requestAnimationFrame(updateControlUI);
         }
 
         // Add VPD loading section
@@ -218,14 +377,6 @@ export class BonePoseUI {
             {
                 path: "res/models/Manhattan_Default/Manhattan.pmx",
                 name: "Manhattan Default"
-            },
-            {
-                path: "res/models/帕朵菲莉丝泳装/帕朵泳装.pmx",
-                name: "Parodos Swimsuit"
-            },
-            {
-                path: "res/models/Sanoto/é¥éóéÔ_v1.3.pmx",
-                name: "Sanoto"
             }
         ];
 
