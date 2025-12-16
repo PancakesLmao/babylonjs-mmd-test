@@ -94,7 +94,7 @@ export class BonePoseUI {
             z-index: 999;
             user-select: none;
         `;
-        floatingToggle.textContent = "○";
+        floatingToggle.textContent = "✕";
         let isShown = true;
 
         floatingToggle.addEventListener("mouseover", () => {
@@ -109,10 +109,10 @@ export class BonePoseUI {
             const mainPanel = this._container;
             isShown = !isShown;
             mainPanel.style.display = isShown ? "block" : "none";
-            floatingToggle.textContent = isShown ? "○" : "✕";
+            floatingToggle.textContent = isShown ? "✕" : "○";
             floatingToggle.style.background = isShown
-                ? "linear-gradient(135deg, #d4a574 0%, #c8945f 100%)"
-                : "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)";
+                ? "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)"
+                : "linear-gradient(135deg, #d4a574 0%, #c8945f 100%)";
         });
         document.body.appendChild(floatingToggle);
 

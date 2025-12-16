@@ -232,7 +232,11 @@ export class CameraController {
         this._cameraDistance += event.deltaY > 0 ? zoomSpeed : -zoomSpeed;
         // Clamp distance between min and max
         this._cameraDistance = Math.max(0.5, Math.min(150, this._cameraDistance));
-        this._updateCameraPosition();
+
+        // Only update distance on the camera, don't update position/rotation
+        (this._camera as any).distance = this._cameraDistance;
+
+        console.log(`Camera zoom distance: ${this._cameraDistance.toFixed(2)}`);
     }
 
     private _onKeyDown(event: KeyboardEvent): void {
