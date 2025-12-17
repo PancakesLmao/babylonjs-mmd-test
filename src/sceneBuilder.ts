@@ -39,7 +39,7 @@ export class SceneBuilder implements ISceneBuilder {
     ): Promise<Scene> {
         const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeMPR());
         const physicsRuntime = new MultiPhysicsRuntime(wasmInstance);
-        physicsRuntime.setGravity(new Vector3(0, -100, 0));
+        physicsRuntime.setGravity(new Vector3(0, -98, 0));
 
         const materialBuilder = new MmdStandardMaterialBuilder();
         const scene = new Scene(engine);
@@ -103,7 +103,7 @@ export class SceneBuilder implements ISceneBuilder {
         physicsRuntime.addRigidBodyToGlobal(groundBody);
 
         const modelMesh = await LoadAssetContainerAsync(
-            "res/models/Manhattan_Casual/Manhattan.pmx",
+            "res/models/durandal/デュランダル.pmx",
             scene,
             {
                 pluginOptions: {

@@ -11,12 +11,19 @@ export class BoneController {
     private readonly _originalTransforms: Map<string, BoneTransform> = new Map();
     private _selectedBoneName: string | null = null;
     private _bonesInitialized = false;
+    private _transformsCaptured = false;
     private _skeletonReadyCallbacks: (() => void)[] = [];
 
     public constructor(modelMesh: MmdMesh) {
         this._modelMesh = modelMesh;
         // Check for skeleton periodically since babylon-mmd loads it asynchronously
         this._waitForSkeleton();
+        // Retry bone transform capture after a delay to ensure skeleton is fully loaded
+        setTimeout(() => {
+            if (!this._transformsCaptured && this._bonesInitialized) {
+                this._storeBoneTransforms();
+            }
+        }, 100);
     }
 
     private _waitForSkeleton(): void {
@@ -57,7 +64,10 @@ export class BoneController {
     }
 
     private _storeBoneTransforms(): void {
-    // babylon-mmd stores the skeleton in metadata.skeleton
+    // Skip if already captured
+        if (this._transformsCaptured) return;
+
+        // babylon-mmd stores the skeleton in metadata.skeleton
         const skeleton =
       this._modelMesh.skeleton ||
       (this._modelMesh.metadata as unknown as { skeleton?: unknown })?.skeleton;
@@ -84,6 +94,7 @@ export class BoneController {
           boneObj.getRotationQuaternion()?.clone() || Quaternion.Identity()
             });
         }
+        this._transformsCaptured = true;
         console.log(`Stored ${this._originalTransforms.size} bones`);
     }
 

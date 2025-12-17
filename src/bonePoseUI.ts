@@ -38,8 +38,7 @@ export class BonePoseUI {
         document.body.appendChild(this._container);
 
         // Show loading message initially
-        this._container.innerHTML =
-      "<h3>Bone Pose Control</h3><p>Loading bones...</p>";
+        this._container.innerHTML = "<h3>Model Control</h3><p>Loading bones...</p>";
 
         // Wait for skeleton to be ready before rendering
         this._boneController.onSkeletonReady(() => {
@@ -49,7 +48,7 @@ export class BonePoseUI {
 
     private _render(): void {
         this._container.innerHTML =
-      "<h3 style=\"margin: 0 0 15px 0;\">Bone Pose Control</h3>";
+      "<h3 style=\"margin: 0 0 15px 0;\">Model Control</h3>";
 
         // Add instructions
         const instructions = document.createElement("div");
@@ -69,6 +68,53 @@ export class BonePoseUI {
             4. Click "Reset All" to reset everything
         `;
         this._container.appendChild(instructions);
+
+        // Add toggle button for camera controls
+        // Create floating toggle button outside the container
+        const floatingToggle = document.createElement("div");
+        floatingToggle.id = "floating-toggle-btn";
+        floatingToggle.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #d4a574 0%, #c8945f 100%);
+            border: 3px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 28px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            z-index: 999;
+            user-select: none;
+        `;
+        floatingToggle.textContent = "✕";
+        let isShown = true;
+
+        floatingToggle.addEventListener("mouseover", () => {
+            floatingToggle.style.transform = "scale(1.1)";
+            floatingToggle.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.4)";
+        });
+        floatingToggle.addEventListener("mouseout", () => {
+            floatingToggle.style.transform = "scale(1)";
+            floatingToggle.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.3)";
+        });
+        floatingToggle.addEventListener("click", () => {
+            const mainPanel = this._container;
+            isShown = !isShown;
+            mainPanel.style.display = isShown ? "block" : "none";
+            floatingToggle.textContent = isShown ? "✕" : "○";
+            floatingToggle.style.background = isShown
+                ? "linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)"
+                : "linear-gradient(135deg, #d4a574 0%, #c8945f 100%)";
+        });
+        document.body.appendChild(floatingToggle);
 
         // Create separate panels for camera controls at top-left (position) and bottom-left (controls)
         if (this._cameraController) {
@@ -729,7 +775,7 @@ export class BonePoseUI {
         const buttonRow = document.createElement("div");
         buttonRow.style.marginBottom = "10px";
         buttonRow.style.display = "grid";
-        buttonRow.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
+        buttonRow.style.gridTemplateColumns = "1fr 1fr 1fr";
         buttonRow.style.gap = "5px";
 
         const playBtn = document.createElement("button");
@@ -773,26 +819,6 @@ export class BonePoseUI {
             }
         });
 
-        const stopBtn = document.createElement("button");
-        stopBtn.textContent = "Stop";
-        stopBtn.id = "vmd-stop-btn";
-        stopBtn.style.cssText = `
-            padding: 6px;
-            background: #f44336;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-        `;
-        stopBtn.disabled = true;
-        stopBtn.addEventListener("click", () => {
-            if (this._vmdAnimationController) {
-                this._vmdAnimationController.stop();
-                this._updatePlayButtonState();
-            }
-        });
-
         const resetBtn = document.createElement("button");
         resetBtn.textContent = "Reset";
         resetBtn.id = "vmd-reset-btn";
@@ -808,13 +834,12 @@ export class BonePoseUI {
         resetBtn.disabled = true;
         resetBtn.addEventListener("click", () => {
             if (this._vmdAnimationController) {
-                this._vmdAnimationController.reset();
+                this._vmdAnimationController.simpleReset();
             }
         });
 
         buttonRow.appendChild(playBtn);
         buttonRow.appendChild(pauseBtn);
-        buttonRow.appendChild(stopBtn);
         buttonRow.appendChild(resetBtn);
         animControlsDiv.appendChild(buttonRow);
 
