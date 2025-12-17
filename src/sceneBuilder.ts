@@ -1,6 +1,8 @@
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import "babylon-mmd/esm/Loader/pmxLoader";
 import "babylon-mmd/esm/Loader/mmdOutlineRenderer";
+import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeModelAnimation";
+import "babylon-mmd/esm/Runtime/Animation/mmdRuntimeCameraAnimation";
 
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
@@ -14,19 +16,46 @@ import { Scene } from "@babylonjs/core/scene";
 import { MmdStandardMaterialBuilder } from "babylon-mmd/esm/Loader/mmdStandardMaterialBuilder";
 import { MmdCamera } from "babylon-mmd/esm/Runtime/mmdCamera";
 import type { MmdMesh } from "babylon-mmd/esm/Runtime/mmdMesh";
+import { MmdRuntime } from "babylon-mmd/esm/Runtime/mmdRuntime";
+import { MmdWasmInstanceTypeMPR } from "babylon-mmd/esm/Runtime/Optimized/InstanceType/multiPhysicsRelease";
+import { GetMmdWasmInstance } from "babylon-mmd/esm/Runtime/Optimized/mmdWasmInstance";
+import { MultiPhysicsRuntime } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/Impl/multiPhysicsRuntime";
+import { MotionType } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/motionType";
+import { PhysicsStaticPlaneShape } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/physicsShape";
+import { RigidBody } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBody";
+import { RigidBodyConstructionInfo } from "babylon-mmd/esm/Runtime/Optimized/Physics/Bind/rigidBodyConstructionInfo";
+import { MmdBulletPhysics } from "babylon-mmd/esm/Runtime/Optimized/Physics/mmdBulletPhysics";
 
-//
 import type { ISceneBuilder } from "./baseRuntime";
+import { BoneController } from "./boneController";
+import { BonePoseUI } from "./bonePoseUI";
+import { CameraController } from "./cameraController";
+import { VmdAnimationController } from "./vmdAnimationController";
 
 export class SceneBuilder implements ISceneBuilder {
     public async build(
         _canvas: HTMLCanvasElement,
         engine: AbstractEngine
     ): Promise<Scene> {
+        const wasmInstance = await GetMmdWasmInstance(new MmdWasmInstanceTypeMPR());
+        const physicsRuntime = new MultiPhysicsRuntime(wasmInstance);
+        physicsRuntime.setGravity(new Vector3(0, -100, 0));
+
         const materialBuilder = new MmdStandardMaterialBuilder();
         const scene = new Scene(engine);
         scene.clearColor = new Color4(0.95, 0.95, 0.95, 1.0);
         scene.ambientColor = new Color3(0.5, 0.5, 0.5);
+
+        // Register physics runtime with scene
+        physicsRuntime.register(scene);
+
+        // Create MmdRuntime for animation playback with physics engine
+        const mmdRuntime = new MmdRuntime(
+            scene,
+            new MmdBulletPhysics(physicsRuntime)
+        );
+        mmdRuntime.loggingEnabled = true;
+        mmdRuntime.register(scene);
 
         const mmdCamera = new MmdCamera("MmdCamera", new Vector3(0, 10, 0), scene);
         scene.activeCamera = mmdCamera;
@@ -60,6 +89,19 @@ export class SceneBuilder implements ISceneBuilder {
         );
         ground.receiveShadows = true;
 
+        // Add physics ground collider so the model can collide with ground
+        const groundPhysicsInfo = new RigidBodyConstructionInfo(
+            physicsRuntime.wasmInstance
+        );
+        groundPhysicsInfo.motionType = MotionType.Static;
+        groundPhysicsInfo.shape = new PhysicsStaticPlaneShape(
+            physicsRuntime,
+            new Vector3(0, 1, 0),
+            0
+        );
+        const groundBody = new RigidBody(physicsRuntime, groundPhysicsInfo);
+        physicsRuntime.addRigidBodyToGlobal(groundBody);
+
         const modelMesh = await LoadAssetContainerAsync(
             "res/models/Manhattan_Casual/Manhattan.pmx",
             scene,
@@ -78,6 +120,29 @@ export class SceneBuilder implements ISceneBuilder {
 
         for (const mesh of modelMesh.metadata.meshes) mesh.receiveShadows = true;
         shadowGenerator.addShadowCaster(modelMesh);
+
+        // Initialize bone pose UI and camera controller
+        const boneController = new BoneController(modelMesh);
+        const cameraController = new CameraController(mmdCamera);
+        const vmdAnimationController = new VmdAnimationController(
+            scene,
+            mmdRuntime
+        );
+        vmdAnimationController.setMmdCamera(mmdCamera);
+        vmdAnimationController.setCameraController(cameraController);
+        vmdAnimationController.setShadowGenerator(shadowGenerator);
+        // Register the initial model
+        vmdAnimationController.registerInitialModel(modelMesh);
+
+        const bonePoseUI = new BonePoseUI(
+            boneController,
+            cameraController,
+            vmdAnimationController
+        );
+        bonePoseUI.setVmdAnimationController(vmdAnimationController);
+
+        // Start animation playback loop
+        mmdRuntime.playAnimation();
 
         return scene;
     }
