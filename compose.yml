@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: babylon-mmd-cafe
+    ports:
+      - "20310:20310"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - babylon-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:20310', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+networks:
+  babylon-network:
+    driver: bridge
