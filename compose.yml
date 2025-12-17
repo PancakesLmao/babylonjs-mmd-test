@@ -19,6 +19,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 45s
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    env_file:
+      - .env
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - babylon-network
 
 networks:
   babylon-network:

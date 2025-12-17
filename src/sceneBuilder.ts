@@ -103,7 +103,7 @@ export class SceneBuilder implements ISceneBuilder {
         physicsRuntime.addRigidBodyToGlobal(groundBody);
 
         const modelMesh = await LoadAssetContainerAsync(
-            "res/models/durandal/デュランダル.pmx",
+            "res/models/galleon/galleon_ver2.00/galleon.pmx",
             scene,
             {
                 pluginOptions: {
