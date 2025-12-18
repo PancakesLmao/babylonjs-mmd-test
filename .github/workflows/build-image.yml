@@ -1,0 +1,35 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout latest code
+        uses: actions/checkout@v4
+
+      - name: Update main repo directory
+        run: |
+          cd ~/babylonjs-test/babylon-mmd-test
+          git pull origin main
+
+      - name: Build and Deploy with Docker Compose
+        run: |
+          cd ~/babylonjs-test/babylon-mmd-test
+          docker compose down
+          docker compose up -d --build
+
+      - name: Verify deployment
+        run: |
+          cd ~/babylonjs-test/babylon-mmd-test
+          docker compose ps
+
+      - name: Check service health
+        run: |
+          cd ~/babylonjs-test/babylon-mmd-test
+          docker compose logs --tail=20
