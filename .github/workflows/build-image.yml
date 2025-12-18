@@ -15,7 +15,8 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: self-hosted
-    if: github.event_name == 'push' || (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository)
+    env:
+      USERNAME: ${{ vars.USERNAME }}
 
     steps:
       - name: Checkout latest code
@@ -23,21 +24,21 @@ jobs:
 
       - name: Update main repo directory
         run: |
-          cd ~/babylonjs-test/babylon-mmd-test
+          cd /home/${USERNAME}/babylonjs-test/babylon-mmd-test
           git pull origin main
 
       - name: Build and Deploy with Docker Compose
         run: |
-          cd ~/babylonjs-test/babylon-mmd-test
+          cd /home/${USERNAME}/babylonjs-test/babylon-mmd-test
           docker compose down
           docker compose up -d --build
 
       - name: Verify deployment
         run: |
-          cd ~/babylonjs-test/babylon-mmd-test
+          cd /home/${USERNAME}/babylonjs-test/babylon-mmd-test
           docker compose ps
 
       - name: Check service health
         run: |
-          cd ~/babylonjs-test/babylon-mmd-test
+          cd /home/${USERNAME}/babylonjs-test/babylon-mmd-test
           docker compose logs --tail=20
