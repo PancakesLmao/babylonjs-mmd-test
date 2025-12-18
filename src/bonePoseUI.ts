@@ -1391,106 +1391,106 @@ export class BonePoseUI {
     }
 
     private _showSecondaryModelAnimationControls(): void {
-        let secondaryAnimationContainer = this._container.querySelector(
-            "#secondary-animation-container"
+    // Check if we already have secondary model section
+        let secondarySection = this._container.querySelector(
+            "#secondary-model-section"
         ) as HTMLElement;
 
-        if (!secondaryAnimationContainer) {
-            secondaryAnimationContainer = document.createElement("div");
-            secondaryAnimationContainer.id = "secondary-animation-container";
-            secondaryAnimationContainer.style.cssText = `
-                margin-top: 15px;
-                padding: 10px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                background-color: #f9f9f9;
-            `;
+        if (!secondarySection) {
+            secondarySection = document.createElement("div");
+            secondarySection.id = "secondary-model-section";
+            secondarySection.style.marginTop = "15px";
+            secondarySection.style.paddingBottom = "15px";
+            secondarySection.style.borderBottom = "1px solid #555";
 
-            const title = document.createElement("h4");
-            title.textContent = "Secondary Model Animation";
-            title.style.margin = "0 0 10px 0";
-            secondaryAnimationContainer.appendChild(title);
+            // Heading for secondary model animations
+            const heading = document.createElement("h3");
+            heading.textContent = "Secondary Model Animation:";
+            heading.style.cssText = `
+                margin: 0 0 12px 0;
+                color: #e0e0e0;
+                font-size: 14px;
+                font-weight: bold;
+            `;
+            secondarySection.appendChild(heading);
 
             // VMD Motion file
             const motionLabel = document.createElement("label");
-            motionLabel.style.cssText = "display: block; margin-bottom: 8px;";
-            motionLabel.innerHTML = `
-                VMD Motion:
-                <input type="file" id="secondary-vmd-motion" accept=".vmd" style="margin-left: 8px;">
-            `;
-            secondaryAnimationContainer.appendChild(motionLabel);
+            motionLabel.textContent = "Load Motion VMD (Optional):";
+            motionLabel.style.display = "block";
+            motionLabel.style.marginBottom = "8px";
+            motionLabel.style.fontWeight = "bold";
+            secondarySection.appendChild(motionLabel);
+
+            const motionInput = document.createElement("input");
+            motionInput.type = "file";
+            motionInput.id = "secondary-vmd-motion";
+            motionInput.accept = ".vmd";
+            motionInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+            secondarySection.appendChild(motionInput);
 
             // VMD Morph file
             const morphLabel = document.createElement("label");
-            morphLabel.style.cssText = "display: block; margin-bottom: 8px;";
-            morphLabel.innerHTML = `
-                VMD Morph:
-                <input type="file" id="secondary-vmd-morph" accept=".vmd" style="margin-left: 8px;">
-            `;
-            secondaryAnimationContainer.appendChild(morphLabel);
+            morphLabel.textContent = "Load Facial Expression VMD (Optional):";
+            morphLabel.style.display = "block";
+            morphLabel.style.marginBottom = "8px";
+            morphLabel.style.fontWeight = "bold";
+            secondarySection.appendChild(morphLabel);
+
+            const morphInput = document.createElement("input");
+            morphInput.type = "file";
+            morphInput.id = "secondary-vmd-morph";
+            morphInput.accept = ".vmd";
+            morphInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+            secondarySection.appendChild(morphInput);
 
             // VMD Mouth file
             const mouthLabel = document.createElement("label");
-            mouthLabel.style.cssText = "display: block; margin-bottom: 8px;";
-            mouthLabel.innerHTML = `
-                VMD Mouth:
-                <input type="file" id="secondary-vmd-mouth" accept=".vmd" style="margin-left: 8px;">
-            `;
-            secondaryAnimationContainer.appendChild(mouthLabel);
+            mouthLabel.textContent = "Load Mouth Motion VMD (Optional):";
+            mouthLabel.style.display = "block";
+            mouthLabel.style.marginBottom = "8px";
+            mouthLabel.style.fontWeight = "bold";
+            secondarySection.appendChild(mouthLabel);
+
+            const mouthInput = document.createElement("input");
+            mouthInput.type = "file";
+            mouthInput.id = "secondary-vmd-mouth";
+            mouthInput.accept = ".vmd";
+            mouthInput.style.cssText = "width: 100%; margin-bottom: 8px;";
+            secondarySection.appendChild(mouthInput);
 
             // VMD Eye file
             const eyeLabel = document.createElement("label");
-            eyeLabel.style.cssText = "display: block; margin-bottom: 8px;";
-            eyeLabel.innerHTML = `
-                VMD Eye:
-                <input type="file" id="secondary-vmd-eye" accept=".vmd" style="margin-left: 8px;">
-            `;
-            secondaryAnimationContainer.appendChild(eyeLabel);
+            eyeLabel.textContent = "Load Eye Motion VMD (Optional):";
+            eyeLabel.style.display = "block";
+            eyeLabel.style.marginBottom = "12px";
+            eyeLabel.style.fontWeight = "bold";
+            secondarySection.appendChild(eyeLabel);
 
-            // Load button
-            const loadAnimBtn = document.createElement("button");
-            loadAnimBtn.textContent = "Load Secondary Animation";
-            loadAnimBtn.style.cssText = `
-                margin-top: 10px;
-                padding: 8px 12px;
-                background-color: #666;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            `;
+            const eyeInput = document.createElement("input");
+            eyeInput.type = "file";
+            eyeInput.id = "secondary-vmd-eye";
+            eyeInput.accept = ".vmd";
+            eyeInput.style.cssText = "width: 100%; margin-bottom: 12px;";
+            secondarySection.appendChild(eyeInput);
 
-            loadAnimBtn.addEventListener("click", async() => {
-                if (!this._vmdAnimationController) return;
+            // Auto-load animations when motion file is selected
+            motionInput.addEventListener("change", async(e) => {
+                const motionFile = (e.target as HTMLInputElement).files?.[0];
+                if (motionFile && this._vmdAnimationController) {
+                    try {
+                        const morphFile = (morphInput as HTMLInputElement)?.files?.[0];
+                        const mouthFile = (mouthInput as HTMLInputElement)?.files?.[0];
+                        const eyeFile = (eyeInput as HTMLInputElement)?.files?.[0];
 
-                try {
-                    const motionInput = secondaryAnimationContainer.querySelector(
-                        "#secondary-vmd-motion"
-                    ) as HTMLInputElement;
-                    const morphInput = secondaryAnimationContainer.querySelector(
-                        "#secondary-vmd-morph"
-                    ) as HTMLInputElement;
-                    const mouthInput = secondaryAnimationContainer.querySelector(
-                        "#secondary-vmd-mouth"
-                    ) as HTMLInputElement;
-                    const eyeInput = secondaryAnimationContainer.querySelector(
-                        "#secondary-vmd-eye"
-                    ) as HTMLInputElement;
+                        const secondaryModelIndex =
+              this._vmdAnimationController.getSecondaryModelIndex();
+                        if (secondaryModelIndex === -1) {
+                            console.warn("No secondary model loaded");
+                            return;
+                        }
 
-                    const motionFile = motionInput?.files?.[0];
-                    const morphFile = morphInput?.files?.[0];
-                    const mouthFile = mouthInput?.files?.[0];
-                    const eyeFile = eyeInput?.files?.[0];
-
-                    const secondaryModelIndex =
-            this._vmdAnimationController.getSecondaryModelIndex();
-                    if (secondaryModelIndex === -1) {
-                        alert("No secondary model loaded");
-                        return;
-                    }
-
-                    if (motionFile) {
-                        // Use the most comprehensive loader available
+                        // Load with available files
                         if (motionFile && morphFile && mouthFile && eyeFile) {
                             await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
                                 motionFile,
@@ -1520,33 +1520,25 @@ export class BonePoseUI {
                         }
 
                         console.log("Secondary model animations loaded");
+                    } catch (error) {
+                        console.error("Failed to load secondary animations:", error);
                     }
-                } catch (error) {
-                    console.error("Failed to load secondary animations:", error);
-                    alert(
-                        "Failed to load secondary animations. Check console for details."
-                    );
                 }
             });
 
-            secondaryAnimationContainer.appendChild(loadAnimBtn);
-
-            // Find a good place to insert - look for vmd container or just append to parent
-            const vmdContainer =
-        this._container.querySelector("#vmd-container") ||
-        this._container.querySelector("[style*='border-bottom']");
-            if (vmdContainer?.parentNode) {
-                vmdContainer.parentNode.insertBefore(
-                    secondaryAnimationContainer,
+            // Insert after vmd container
+            const vmdContainer = this._container.querySelector("#vmd-container");
+            if (vmdContainer) {
+                vmdContainer.parentNode?.insertBefore(
+                    secondarySection,
                     vmdContainer.nextSibling
                 );
             } else {
-                // Fallback: append to container
-                this._container.appendChild(secondaryAnimationContainer);
+                this._container.appendChild(secondarySection);
             }
         }
 
         // Make it visible
-        secondaryAnimationContainer.style.display = "block";
+        secondarySection.style.display = "block";
     }
 }
