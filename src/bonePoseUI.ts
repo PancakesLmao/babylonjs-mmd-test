@@ -1,6 +1,7 @@
 import type { BoneController } from "./boneController";
 import type { CameraController } from "./cameraController";
 import type { VmdAnimationController } from "./vmdAnimationController";
+import { availableModels } from "./vmdAnimationController";
 import { VpdLoader } from "./vpdLoader";
 
 export class BonePoseUI {
@@ -391,83 +392,290 @@ export class BonePoseUI {
         vpdContainer.appendChild(vpdFileInput);
         this._container.appendChild(vpdContainer);
 
-        // Add model loading section
-        const modelContainer = document.createElement("div");
-        modelContainer.style.marginBottom = "15px";
-        modelContainer.style.paddingBottom = "15px";
-        modelContainer.style.borderBottom = "1px solid #555";
+        // Add Model Manager section
+        const modelManagerContainer = document.createElement("div");
+        modelManagerContainer.style.marginBottom = "15px";
+        modelManagerContainer.style.paddingBottom = "15px";
+        modelManagerContainer.style.borderBottom = "1px solid #555";
 
-        const modelLabel = document.createElement("label");
-        modelLabel.textContent = "Load Second Model:";
-        modelLabel.style.display = "block";
-        modelLabel.style.marginBottom = "8px";
-        modelLabel.style.fontWeight = "bold";
+        const modelManagerTitle = document.createElement("div");
+        modelManagerTitle.textContent = "Model Manager";
+        modelManagerTitle.style.cssText = `
+            font-weight: bold;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #fff;
+        `;
+        modelManagerContainer.appendChild(modelManagerTitle);
 
-        const modelSelect = document.createElement("select");
-        modelSelect.style.cssText =
-      "width: 100%; margin-bottom: 8px; padding: 6px;";
+        // Primary model selection
+        const primaryModelLabel = document.createElement("label");
+        primaryModelLabel.textContent = "Primary Model:";
+        primaryModelLabel.style.display = "block";
+        primaryModelLabel.style.marginBottom = "4px";
+        primaryModelLabel.style.fontSize = "11px";
+        primaryModelLabel.style.fontWeight = "bold";
 
-        // Add default option
-        const modelDefaultOption = document.createElement("option");
-        modelDefaultOption.value = "";
-        modelDefaultOption.textContent = "Select a model...";
-        modelSelect.appendChild(modelDefaultOption);
+        const primaryModelSelect = document.createElement("select");
+        primaryModelSelect.id = "primary-model-select";
+        primaryModelSelect.style.cssText =
+      "width: 100%; margin-bottom: 6px; padding: 6px; font-size: 11px;";
 
-        // Add available models
-        const availableModels = [
-            { path: "res/models/Kitasan/Kitasan.pmx", name: "Kitasan" },
-            {
-                path: "res/models/Manhattan_Casual/Manhattan.pmx",
-                name: "Manhattan Casual"
-            },
-            {
-                path: "res/models/Manhattan_Default/Manhattan.pmx",
-                name: "Manhattan Default"
-            }
-        ];
-
+        // Add available models to primary dropdown
         for (const model of availableModels) {
             const option = document.createElement("option");
             option.value = model.path;
             option.textContent = model.name;
-            modelSelect.appendChild(option);
+            // Select Durandal by default
+            if (model.name === "Durandal") {
+                option.selected = true;
+            }
+            primaryModelSelect.appendChild(option);
         }
 
-        modelSelect.addEventListener("change", async() => {
-            const selectedPath = modelSelect.value;
-            if (selectedPath) {
-                try {
-                    if (this._vmdAnimationController) {
-                        const modelMesh = await this._vmdAnimationController.loadModel(
-                            selectedPath
-                        );
-                        console.log("Second model loaded:", modelMesh);
-                        alert(
-                            "Second model loaded successfully! The new model will play the same animation."
-                        );
-                        // Reset dropdown after successful load
-                        modelSelect.value = "";
+        const primaryButtonsContainer = document.createElement("div");
+        primaryButtonsContainer.style.cssText = `
+            display: flex;
+            gap: 6px;
+            margin-bottom: 12px;
+        `;
 
-                        // Show animation controls for second model
-                        this._showSecondModelAnimationControls();
-                    } else {
-                        alert(
-                            "Animation controller not initialized. Please reload the page."
-                        );
+        const primaryLoadBtn = document.createElement("button");
+        primaryLoadBtn.textContent = "Switch";
+        primaryLoadBtn.style.cssText = `
+            flex: 1;
+            padding: 6px;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: background 0.2s;
+        `;
+        primaryLoadBtn.addEventListener("mouseover", () => {
+            primaryLoadBtn.style.background = "#357abd";
+        });
+        primaryLoadBtn.addEventListener("mouseout", () => {
+            primaryLoadBtn.style.background = "#4a90e2";
+        });
+        primaryLoadBtn.addEventListener("click", async() => {
+            const selectedPath = primaryModelSelect.value;
+            if (selectedPath && this._vmdAnimationController) {
+                try {
+                    primaryLoadBtn.disabled = true;
+                    primaryLoadBtn.textContent = "Loading...";
+
+                    // If switching to a different model, unload current primary first
+                    const currentPrimary =
+            this._vmdAnimationController.getPrimaryModelIndex();
+
+                    // Always unload the current primary before loading a new one
+                    // This ensures we replace, not duplicate
+                    if (currentPrimary >= 0) {
+                        this._vmdAnimationController.unloadModel(currentPrimary);
                     }
+
+                    // Load new primary model
+                    await this._vmdAnimationController.loadModelHotSwap(
+                        selectedPath,
+                        true
+                    );
+                    console.log("Primary model switched:", selectedPath);
+
+                    primaryLoadBtn.disabled = false;
+                    primaryLoadBtn.textContent = "Switch";
                 } catch (error) {
-                    console.error("Failed to load model:", error);
-                    alert("Failed to load model. Check console for details.");
+                    console.error("Failed to switch primary model:", error);
+                    alert("Failed to switch model. Check console for details.");
+                    primaryLoadBtn.disabled = false;
+                    primaryLoadBtn.textContent = "Switch";
                 }
             }
         });
 
-        modelContainer.appendChild(modelLabel);
-        modelContainer.appendChild(modelSelect);
-        this._container.appendChild(modelContainer);
+        const primaryClearBtn = document.createElement("button");
+        primaryClearBtn.textContent = "Clear";
+        primaryClearBtn.style.cssText = `
+            flex: 1;
+            padding: 6px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: background 0.2s;
+        `;
+        primaryClearBtn.addEventListener("mouseover", () => {
+            primaryClearBtn.style.background = "#c0392b";
+        });
+        primaryClearBtn.addEventListener("mouseout", () => {
+            primaryClearBtn.style.background = "#e74c3c";
+        });
+        primaryClearBtn.addEventListener("click", async() => {
+            if (this._vmdAnimationController) {
+                try {
+                    const currentPrimary =
+            this._vmdAnimationController.getPrimaryModelIndex();
+                    const durandalPath = "res/models/durandal/デュランダル.pmx";
+
+                    // Unload current primary if not Durandal
+                    if (currentPrimary !== 0 && currentPrimary >= 0) {
+                        this._vmdAnimationController.unloadModel(currentPrimary);
+                    }
+                    // After unloading, primary should be 0 (Durandal), but reload it to be sure
+                    if (this._vmdAnimationController.getPrimaryModelIndex() !== 0) {
+                        // Durandal doesn't exist, load it
+                        await this._vmdAnimationController.loadModelHotSwap(
+                            durandalPath,
+                            true
+                        );
+                    }
+                    // Reset dropdown to Durandal
+                    primaryModelSelect.value = durandalPath;
+                    console.log("Primary model cleared and reset to Durandal");
+                } catch (error) {
+                    console.error("Failed to clear primary model:", error);
+                    alert("Failed to clear model. Check console for details.");
+                }
+            }
+        });
+
+        primaryButtonsContainer.appendChild(primaryLoadBtn);
+        primaryButtonsContainer.appendChild(primaryClearBtn);
+
+        modelManagerContainer.appendChild(primaryModelLabel);
+        modelManagerContainer.appendChild(primaryModelSelect);
+        modelManagerContainer.appendChild(primaryButtonsContainer);
+
+        // Secondary model selection
+        const secondaryModelLabel = document.createElement("label");
+        secondaryModelLabel.textContent = "Secondary Model (Optional):";
+        secondaryModelLabel.style.display = "block";
+        secondaryModelLabel.style.marginBottom = "4px";
+        secondaryModelLabel.style.fontSize = "11px";
+        secondaryModelLabel.style.fontWeight = "bold";
+
+        const secondaryModelSelect = document.createElement("select");
+        secondaryModelSelect.id = "secondary-model-select";
+        secondaryModelSelect.style.cssText =
+      "width: 100%; margin-bottom: 6px; padding: 6px; font-size: 11px;";
+
+        // Add default empty option
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "None";
+        secondaryModelSelect.appendChild(emptyOption);
+
+        // Add available models to secondary dropdown
+        for (const model of availableModels) {
+            const option = document.createElement("option");
+            option.value = model.path;
+            option.textContent = model.name;
+            secondaryModelSelect.appendChild(option);
+        }
+        const secondaryButtonsContainer = document.createElement("div");
+        secondaryButtonsContainer.style.cssText = `
+            display: flex;
+            gap: 6px;
+            margin-bottom: 0;
+        `;
+
+        const secondaryLoadBtn = document.createElement("button");
+        secondaryLoadBtn.textContent = "Load";
+        secondaryLoadBtn.style.cssText = `
+            flex: 1;
+            padding: 6px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: background 0.2s;
+        `;
+        secondaryLoadBtn.addEventListener("mouseover", () => {
+            secondaryLoadBtn.style.background = "#229954";
+        });
+        secondaryLoadBtn.addEventListener("mouseout", () => {
+            secondaryLoadBtn.style.background = "#27ae60";
+        });
+        secondaryLoadBtn.addEventListener("click", async() => {
+            const selectedPath = secondaryModelSelect.value;
+            if (selectedPath && this._vmdAnimationController) {
+                try {
+                    secondaryLoadBtn.disabled = true;
+                    secondaryLoadBtn.textContent = "Loading...";
+
+                    await this._vmdAnimationController.loadModelHotSwap(
+                        selectedPath,
+                        false
+                    );
+                    console.log("Secondary model loaded:", selectedPath);
+
+                    // Show animation controls for secondary model
+                    this._showSecondaryModelAnimationControls();
+
+                    secondaryLoadBtn.disabled = false;
+                    secondaryLoadBtn.textContent = "Load";
+                } catch (error) {
+                    console.error("Failed to load secondary model:", error);
+                    alert("Failed to load secondary model. Check console for details.");
+                    secondaryLoadBtn.disabled = false;
+                    secondaryLoadBtn.textContent = "Load";
+                }
+            }
+        });
+
+        const secondaryClearBtn = document.createElement("button");
+        secondaryClearBtn.textContent = "Clear";
+        secondaryClearBtn.style.cssText = `
+            flex: 1;
+            padding: 6px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: background 0.2s;
+        `;
+        secondaryClearBtn.addEventListener("mouseover", () => {
+            secondaryClearBtn.style.background = "#c0392b";
+        });
+        secondaryClearBtn.addEventListener("mouseout", () => {
+            secondaryClearBtn.style.background = "#e74c3c";
+        });
+        secondaryClearBtn.addEventListener("click", () => {
+            if (this._vmdAnimationController) {
+                const secondaryIndex =
+          this._vmdAnimationController.getSecondaryModelIndex();
+                if (secondaryIndex >= 0) {
+                    this._vmdAnimationController.unloadModel(secondaryIndex);
+                    // Reset dropdown
+                    secondaryModelSelect.value = "";
+                    console.log("Secondary model cleared");
+                }
+            }
+        });
+
+        secondaryButtonsContainer.appendChild(secondaryLoadBtn);
+        secondaryButtonsContainer.appendChild(secondaryClearBtn);
+
+        modelManagerContainer.appendChild(secondaryModelLabel);
+        modelManagerContainer.appendChild(secondaryModelSelect);
+        modelManagerContainer.appendChild(secondaryButtonsContainer);
+
+        this._container.appendChild(modelManagerContainer);
 
         // Add VMD loading and animation section
         const vmdContainer = document.createElement("div");
+        vmdContainer.id = "vmd-container";
         vmdContainer.style.marginBottom = "15px";
         vmdContainer.style.paddingBottom = "15px";
         vmdContainer.style.borderBottom = "1px solid #555";
@@ -1182,260 +1390,163 @@ export class BonePoseUI {
         this._animationUpdateHandle = requestAnimationFrame(updateFrame);
     }
 
-    private _showSecondModelAnimationControls(): void {
-        const secondModelIndex = 1; // Index of the second model
+    private _showSecondaryModelAnimationControls(): void {
+        let secondaryAnimationContainer = this._container.querySelector(
+            "#secondary-animation-container"
+        ) as HTMLElement;
 
-        // Check if controls already exist
-        const existingControls = this._container.querySelector(
-            "#second-model-animation-controls"
-        );
-        if (existingControls) {
-            return; // Already shown, don't create duplicate
-        }
+        if (!secondaryAnimationContainer) {
+            secondaryAnimationContainer = document.createElement("div");
+            secondaryAnimationContainer.id = "secondary-animation-container";
+            secondaryAnimationContainer.style.cssText = `
+                margin-top: 15px;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: #f9f9f9;
+            `;
 
-        // Create container for second model controls
-        const secondModelContainer = document.createElement("div");
-        secondModelContainer.id = "second-model-animation-controls";
-        secondModelContainer.style.marginTop = "15px";
-        secondModelContainer.style.paddingTop = "15px";
-        secondModelContainer.style.borderTop = "2px solid #6496c8";
+            const title = document.createElement("h4");
+            title.textContent = "Secondary Model Animation";
+            title.style.margin = "0 0 10px 0";
+            secondaryAnimationContainer.appendChild(title);
 
-        const secondModelTitle = document.createElement("h4");
-        secondModelTitle.textContent = "Second Model Animation";
-        secondModelTitle.style.margin = "0 0 10px 0";
-        secondModelTitle.style.color = "#6496c8";
-        secondModelContainer.appendChild(secondModelTitle);
+            // VMD Motion file
+            const motionLabel = document.createElement("label");
+            motionLabel.style.cssText = "display: block; margin-bottom: 8px;";
+            motionLabel.innerHTML = `
+                VMD Motion:
+                <input type="file" id="secondary-vmd-motion" accept=".vmd" style="margin-left: 8px;">
+            `;
+            secondaryAnimationContainer.appendChild(motionLabel);
 
-        // Motion VMD file input
-        const secondModelVmdLabel = document.createElement("label");
-        secondModelVmdLabel.textContent = "Load Motion VMD (Body/Bones):";
-        secondModelVmdLabel.style.display = "block";
-        secondModelVmdLabel.style.marginBottom = "8px";
-        secondModelVmdLabel.style.fontWeight = "bold";
+            // VMD Morph file
+            const morphLabel = document.createElement("label");
+            morphLabel.style.cssText = "display: block; margin-bottom: 8px;";
+            morphLabel.innerHTML = `
+                VMD Morph:
+                <input type="file" id="secondary-vmd-morph" accept=".vmd" style="margin-left: 8px;">
+            `;
+            secondaryAnimationContainer.appendChild(morphLabel);
 
-        const secondModelVmdInput = document.createElement("input");
-        secondModelVmdInput.type = "file";
-        secondModelVmdInput.accept = ".vmd";
-        secondModelVmdInput.id = "second-model-motion-vmd";
-        secondModelVmdInput.style.cssText = "width: 100%; margin-bottom: 12px;";
+            // VMD Mouth file
+            const mouthLabel = document.createElement("label");
+            mouthLabel.style.cssText = "display: block; margin-bottom: 8px;";
+            mouthLabel.innerHTML = `
+                VMD Mouth:
+                <input type="file" id="secondary-vmd-mouth" accept=".vmd" style="margin-left: 8px;">
+            `;
+            secondaryAnimationContainer.appendChild(mouthLabel);
 
-        secondModelVmdInput.addEventListener("change", async(e) => {
-            const motionFile = (e.target as HTMLInputElement).files?.[0];
-            const morphFile = (
-        secondModelContainer.querySelector(
-            "#second-model-morph-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const mouthFile = (
-        secondModelContainer.querySelector(
-            "#second-model-mouth-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const eyeFile = (
-        secondModelContainer.querySelector(
-            "#second-model-eye-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
+            // VMD Eye file
+            const eyeLabel = document.createElement("label");
+            eyeLabel.style.cssText = "display: block; margin-bottom: 8px;";
+            eyeLabel.innerHTML = `
+                VMD Eye:
+                <input type="file" id="secondary-vmd-eye" accept=".vmd" style="margin-left: 8px;">
+            `;
+            secondaryAnimationContainer.appendChild(eyeLabel);
 
-            if (motionFile) {
+            // Load button
+            const loadAnimBtn = document.createElement("button");
+            loadAnimBtn.textContent = "Load Secondary Animation";
+            loadAnimBtn.style.cssText = `
+                margin-top: 10px;
+                padding: 8px 12px;
+                background-color: #666;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+
+            loadAnimBtn.addEventListener("click", async() => {
+                if (!this._vmdAnimationController) return;
+
                 try {
-                    if (this._vmdAnimationController) {
-                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
-                            motionFile,
-                            morphFile || null,
-                            mouthFile || null,
-                            eyeFile || null,
-                            secondModelIndex
-                        );
-                        alert("Animation loaded for second model successfully!");
-                    } else {
-                        alert("Animation controller not initialized.");
+                    const motionInput = secondaryAnimationContainer.querySelector(
+                        "#secondary-vmd-motion"
+                    ) as HTMLInputElement;
+                    const morphInput = secondaryAnimationContainer.querySelector(
+                        "#secondary-vmd-morph"
+                    ) as HTMLInputElement;
+                    const mouthInput = secondaryAnimationContainer.querySelector(
+                        "#secondary-vmd-mouth"
+                    ) as HTMLInputElement;
+                    const eyeInput = secondaryAnimationContainer.querySelector(
+                        "#secondary-vmd-eye"
+                    ) as HTMLInputElement;
+
+                    const motionFile = motionInput?.files?.[0];
+                    const morphFile = morphInput?.files?.[0];
+                    const mouthFile = mouthInput?.files?.[0];
+                    const eyeFile = eyeInput?.files?.[0];
+
+                    const secondaryModelIndex =
+            this._vmdAnimationController.getSecondaryModelIndex();
+                    if (secondaryModelIndex === -1) {
+                        alert("No secondary model loaded");
+                        return;
                     }
-                } catch (error) {
-                    console.error("Failed to load animation for second model:", error);
-                    alert("Failed to load animation. Check console for details.");
-                }
-            }
-        });
 
-        secondModelContainer.appendChild(secondModelVmdLabel);
-        secondModelContainer.appendChild(secondModelVmdInput);
-
-        // Morph/Facial Expression VMD file input
-        const secondModelMorphLabel = document.createElement("label");
-        secondModelMorphLabel.textContent =
-      "Load Facial Expression VMD (Optional):";
-        secondModelMorphLabel.style.display = "block";
-        secondModelMorphLabel.style.marginBottom = "8px";
-        secondModelMorphLabel.style.fontWeight = "bold";
-
-        const secondModelMorphInput = document.createElement("input");
-        secondModelMorphInput.type = "file";
-        secondModelMorphInput.accept = ".vmd";
-        secondModelMorphInput.id = "second-model-morph-vmd";
-        secondModelMorphInput.style.cssText = "width: 100%; margin-bottom: 8px;";
-
-        secondModelMorphInput.addEventListener("change", async(e) => {
-            const morphFile = (e.target as HTMLInputElement).files?.[0];
-            const motionFile = (
-        secondModelContainer.querySelector(
-            "#second-model-motion-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const mouthFile = (
-        secondModelContainer.querySelector(
-            "#second-model-mouth-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const eyeFile = (
-        secondModelContainer.querySelector(
-            "#second-model-eye-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-
-            if (morphFile) {
-                try {
-                    if (this._vmdAnimationController) {
-                        if (motionFile) {
-                            // Both motion and morphs loaded
+                    if (motionFile) {
+                        // Use the most comprehensive loader available
+                        if (motionFile && morphFile && mouthFile && eyeFile) {
                             await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
                                 motionFile,
                                 morphFile,
-                                mouthFile || null,
-                                eyeFile || null,
-                                secondModelIndex
+                                mouthFile,
+                                eyeFile,
+                                secondaryModelIndex
                             );
-                        } else {
-                            // Only facial/morphs - load as regular VMD for this model
-                            await this._vmdAnimationController.loadVmdForModel(
+                        } else if (motionFile && morphFile && mouthFile) {
+                            await this._vmdAnimationController.loadVmdForModelWithMorphsAndMouth(
+                                motionFile,
                                 morphFile,
-                                secondModelIndex
+                                mouthFile,
+                                secondaryModelIndex
+                            );
+                        } else if (motionFile && morphFile) {
+                            await this._vmdAnimationController.loadVmdForModelWithMorphs(
+                                motionFile,
+                                morphFile,
+                                secondaryModelIndex
+                            );
+                        } else if (motionFile) {
+                            await this._vmdAnimationController.loadVmdForModel(
+                                motionFile,
+                                secondaryModelIndex
                             );
                         }
-                        alert("Animation loaded for second model successfully!");
-                    } else {
-                        alert("Animation controller not initialized.");
+
+                        console.log("Secondary model animations loaded");
                     }
                 } catch (error) {
-                    console.error("Failed to load animation for second model:", error);
-                    alert("Failed to load animation. Check console for details.");
+                    console.error("Failed to load secondary animations:", error);
+                    alert(
+                        "Failed to load secondary animations. Check console for details."
+                    );
                 }
+            });
+
+            secondaryAnimationContainer.appendChild(loadAnimBtn);
+
+            // Find a good place to insert - look for vmd container or just append to parent
+            const vmdContainer =
+        this._container.querySelector("#vmd-container") ||
+        this._container.querySelector("[style*='border-bottom']");
+            if (vmdContainer?.parentNode) {
+                vmdContainer.parentNode.insertBefore(
+                    secondaryAnimationContainer,
+                    vmdContainer.nextSibling
+                );
+            } else {
+                // Fallback: append to container
+                this._container.appendChild(secondaryAnimationContainer);
             }
-        });
+        }
 
-        secondModelContainer.appendChild(secondModelMorphLabel);
-        secondModelContainer.appendChild(secondModelMorphInput);
-
-        // Add mouth motion import for second model
-        const secondModelMouthLabel = document.createElement("label");
-        secondModelMouthLabel.textContent = "Load Mouth Motion VMD (Optional):";
-        secondModelMouthLabel.style.display = "block";
-        secondModelMouthLabel.style.marginBottom = "8px";
-        secondModelMouthLabel.style.fontWeight = "bold";
-
-        const secondModelMouthInput = document.createElement("input");
-        secondModelMouthInput.type = "file";
-        secondModelMouthInput.accept = ".vmd";
-        secondModelMouthInput.id = "second-model-mouth-vmd";
-        secondModelMouthInput.style.cssText = "width: 100%; margin-bottom: 8px;";
-
-        secondModelMouthInput.addEventListener("change", async(e) => {
-            const mouthFile = (e.target as HTMLInputElement).files?.[0];
-            const motionFile = (
-        secondModelContainer.querySelector(
-            "#second-model-motion-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const morphFile = (
-        secondModelContainer.querySelector(
-            "#second-model-morph-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const eyeFile = (
-        secondModelContainer.querySelector(
-            "#second-model-eye-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-
-            if (mouthFile && motionFile) {
-                try {
-                    if (this._vmdAnimationController) {
-                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
-                            motionFile,
-                            morphFile || null,
-                            mouthFile,
-                            eyeFile || null,
-                            secondModelIndex
-                        );
-                        alert("Animation loaded for second model successfully!");
-                    } else {
-                        alert("Animation controller not initialized.");
-                    }
-                } catch (error) {
-                    console.error("Failed to load mouth motion for second model:", error);
-                    alert("Failed to load mouth motion. Check console for details.");
-                }
-            }
-        });
-
-        secondModelContainer.appendChild(secondModelMouthLabel);
-        secondModelContainer.appendChild(secondModelMouthInput);
-
-        // Add eye motion import for second model
-        const secondModelEyeLabel = document.createElement("label");
-        secondModelEyeLabel.textContent = "Load Eye Motion VMD (Optional):";
-        secondModelEyeLabel.style.display = "block";
-        secondModelEyeLabel.style.marginBottom = "8px";
-        secondModelEyeLabel.style.fontWeight = "bold";
-
-        const secondModelEyeInput = document.createElement("input");
-        secondModelEyeInput.type = "file";
-        secondModelEyeInput.accept = ".vmd";
-        secondModelEyeInput.id = "second-model-eye-vmd";
-        secondModelEyeInput.style.cssText = "width: 100%; margin-bottom: 8px;";
-
-        secondModelEyeInput.addEventListener("change", async(e) => {
-            const eyeFile = (e.target as HTMLInputElement).files?.[0];
-            const motionFile = (
-        secondModelContainer.querySelector(
-            "#second-model-motion-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const morphFile = (
-        secondModelContainer.querySelector(
-            "#second-model-morph-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-            const mouthFile = (
-        secondModelContainer.querySelector(
-            "#second-model-mouth-vmd"
-        ) as HTMLInputElement
-            )?.files?.[0];
-
-            if (eyeFile && motionFile) {
-                try {
-                    if (this._vmdAnimationController) {
-                        await this._vmdAnimationController.loadVmdForModelWithMorphsMouthAndEye(
-                            motionFile,
-                            morphFile || null,
-                            mouthFile || null,
-                            eyeFile,
-                            secondModelIndex
-                        );
-                        alert("Animation loaded for second model successfully!");
-                    } else {
-                        alert("Animation controller not initialized.");
-                    }
-                } catch (error) {
-                    console.error("Failed to load eye motion for second model:", error);
-                    alert("Failed to load eye motion. Check console for details.");
-                }
-            }
-        });
-
-        secondModelContainer.appendChild(secondModelEyeLabel);
-        secondModelContainer.appendChild(secondModelEyeInput);
-
-        this._container.appendChild(secondModelContainer);
+        // Make it visible
+        secondaryAnimationContainer.style.display = "block";
     }
 }

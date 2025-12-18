@@ -20,6 +20,23 @@ import { AnimationBlender } from "./animationBlender";
 import type { CameraController } from "./cameraController";
 import { HumanoidRetargeter } from "./humanoidRetargeter";
 
+export interface AvailableModel {
+  name: string;
+  path: string;
+}
+
+export const availableModels: AvailableModel[] = [
+    { name: "Durandal", path: "res/models/durandal/デュランダル.pmx" },
+    { name: "Kitasan", path: "res/models/Kitasan/Kitasan.pmx" },
+    { name: "Manhattan", path: "res/models/Manhattan_Default/Manhattan.pmx" },
+    {
+        name: "Manhattan Casual",
+        path: "res/models/Manhattan_Casual/Manhattan.pmx"
+    },
+    { name: "Sanoto", path: "res/models/Sanoto/Sanoto.pmx" },
+    { name: "Galleon", path: "res/models/galleon/galleon_ver2.00/galleon.pmx" }
+];
+
 export class VmdAnimationController {
     private readonly _scene: Scene;
     private readonly _mmdRuntime: MmdRuntime;
@@ -34,6 +51,9 @@ export class VmdAnimationController {
     private readonly _modelRetargeters: Map<MmdModel, HumanoidRetargeter> =
         new Map(); // Humanoid retargeters per model
     private _cameraController: CameraController | null = null;
+    private _primaryModelIndex: number = 0; // Track primary model index
+    private _secondaryModelIndex: number = -1; // Track secondary model index (-1 = none)
+    private readonly _modelMeshes: Map<MmdModel, MmdMesh> = new Map(); // Track meshes for cleanup
 
     public constructor(scene: Scene, mmdRuntime: MmdRuntime) {
         this._scene = scene;
@@ -126,12 +146,174 @@ export class VmdAnimationController {
     // Register the initial model loaded at startup
         const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
         this._loadedModels.push(mmdModel);
+        this._modelMeshes.set(mmdModel, modelMesh);
+        this._primaryModelIndex = 0;
 
         // Create animation blender for this model
         const blender = new AnimationBlender(this._mmdRuntime, mmdModel);
         this._modelBlenders.set(mmdModel, blender);
 
         console.log("Initial model registered with index 0");
+    }
+
+    public getPrimaryModelIndex(): number {
+        return this._primaryModelIndex;
+    }
+
+    public getSecondaryModelIndex(): number {
+        return this._secondaryModelIndex;
+    }
+
+    public async loadModelHotSwap(
+        modelPath: string,
+        isPrimary: boolean = true
+    ): Promise<MmdMesh> {
+        try {
+            console.log(
+                `Hot-loading ${isPrimary ? "primary" : "secondary"} model:`,
+                modelPath
+            );
+            const materialBuilder = new MmdStandardMaterialBuilder();
+
+            const modelMesh = await LoadAssetContainerAsync(modelPath, this._scene, {
+                pluginOptions: {
+                    mmdmodel: {
+                        loggingEnabled: true,
+                        materialBuilder: materialBuilder
+                    }
+                }
+            }).then((result) => {
+                result.addAllToScene();
+                return result.rootNodes[0] as MmdMesh;
+            });
+
+            // Add shadow casting
+            if (this._shadowGenerator) {
+                for (const mesh of modelMesh.metadata.meshes) {
+                    mesh.receiveShadows = true;
+                }
+                this._shadowGenerator.addShadowCaster(modelMesh);
+            }
+
+            // Register with MmdRuntime
+            const mmdModel = this._mmdRuntime.createMmdModel(modelMesh);
+            this._loadedModels.push(mmdModel);
+            this._modelMeshes.set(mmdModel, modelMesh);
+
+            // Create animation blender for this model
+            const blender = new AnimationBlender(this._mmdRuntime, mmdModel);
+            this._modelBlenders.set(mmdModel, blender);
+
+            // Update model tracking
+            const modelIndex = this._loadedModels.length - 1;
+            if (isPrimary) {
+                this._primaryModelIndex = modelIndex;
+            } else {
+                this._secondaryModelIndex = modelIndex;
+            }
+
+            console.log(
+                `Model hot-loaded successfully at index ${modelIndex}:`,
+                modelPath
+            );
+            return modelMesh;
+        } catch (error) {
+            console.error("Failed to hot-load model:", error);
+            throw error;
+        }
+    }
+
+    public unloadModel(modelIndex: number): void {
+        if (modelIndex < 0 || modelIndex >= this._loadedModels.length) {
+            console.warn(`Invalid model index for unload: ${modelIndex}`);
+            return;
+        }
+
+        try {
+            const model = this._loadedModels[modelIndex];
+            const modelMesh = this._modelMeshes.get(model);
+
+            // Track which model was being unloaded (for index adjustment)
+            const removedPrimary = this._primaryModelIndex === modelIndex;
+            const removedSecondary = this._secondaryModelIndex === modelIndex;
+
+            // Remove model from MmdRuntime before disposing
+            const runtimeModels = (this._mmdRuntime as any).models as MmdModel[];
+            if (runtimeModels) {
+                const runtimeModelIndex = runtimeModels.indexOf(model);
+                if (runtimeModelIndex >= 0) {
+                    runtimeModels.splice(runtimeModelIndex, 1);
+                }
+            }
+
+            // Stop animations for this model
+            if (this._modelBlenders.has(model)) {
+                this._modelBlenders.delete(model);
+            }
+
+            // Clear animations
+            if (this._modelAnimations.has(model)) {
+                this._modelAnimations.delete(model);
+            }
+
+            // Clear retargeters
+            if (this._modelRetargeters.has(model)) {
+                this._modelRetargeters.delete(model);
+            }
+
+            // Dispose mesh
+            if (modelMesh) {
+                if (modelMesh.metadata.meshes) {
+                    for (const mesh of modelMesh.metadata.meshes) {
+                        mesh.dispose();
+                    }
+                }
+                modelMesh.dispose();
+                this._modelMeshes.delete(model);
+            }
+
+            // Remove from loaded models (must do this before adjusting indices)
+            this._loadedModels.splice(modelIndex, 1);
+
+            // Update primary/secondary indices AFTER removal
+            if (removedPrimary) {
+                // Primary model was unloaded
+                if (this._secondaryModelIndex >= 0) {
+                    // If secondary exists, promote it to primary
+                    if (this._secondaryModelIndex > modelIndex) {
+                        this._primaryModelIndex = this._secondaryModelIndex - 1;
+                    } else {
+                        this._primaryModelIndex = this._secondaryModelIndex;
+                    }
+                    this._secondaryModelIndex = -1;
+                } else {
+                    // No secondary, reset to index 0 (Durandal should be there)
+                    this._primaryModelIndex = 0;
+                    this._secondaryModelIndex = -1;
+                }
+            } else if (removedSecondary) {
+                // Secondary model was unloaded
+                this._secondaryModelIndex = -1;
+                // Adjust primary index if it was after the removed model
+                if (modelIndex < this._primaryModelIndex) {
+                    this._primaryModelIndex -= 1;
+                }
+            } else {
+                // Some other model was unloaded, adjust indices
+                if (modelIndex < this._primaryModelIndex) {
+                    this._primaryModelIndex -= 1;
+                }
+                if (modelIndex < this._secondaryModelIndex) {
+                    this._secondaryModelIndex -= 1;
+                }
+            }
+
+            console.log(
+                `Model unloaded at index ${modelIndex}. Current primary: ${this._primaryModelIndex}, secondary: ${this._secondaryModelIndex}`
+            );
+        } catch (error) {
+            console.error("Failed to unload model:", error);
+        }
     }
 
     public async loadModel(modelPath: string): Promise<MmdMesh> {
