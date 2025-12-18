@@ -267,27 +267,40 @@ export class CameraController {
 
     private _updateCameraFromKeyboard(): void {
         let moved = false;
+        let moveX = 0;
+        let moveZ = 0;
 
         // W - Move forward
         if (this._keysPressed.get("w")) {
-            this._cameraTarget.z += this._moveSpeed;
+            moveZ += this._moveSpeed;
             moved = true;
         }
         // S - Move backward
         if (this._keysPressed.get("s")) {
-            this._cameraTarget.z -= this._moveSpeed;
+            moveZ -= this._moveSpeed;
             moved = true;
         }
         // A - Move left
         if (this._keysPressed.get("a")) {
-            this._cameraTarget.x -= this._moveSpeed;
+            moveX -= this._moveSpeed;
             moved = true;
         }
         // D - Move right
         if (this._keysPressed.get("d")) {
-            this._cameraTarget.x += this._moveSpeed;
+            moveX += this._moveSpeed;
             moved = true;
         }
+
+        // Apply camera rotation to movement (so WASD is always relative to world, not camera orientation)
+        if (moveX !== 0 || moveZ !== 0) {
+            const yaw = this._cameraRotationY;
+            const cos = Math.cos(yaw);
+            const sin = Math.sin(yaw);
+
+            this._cameraTarget.x += moveX * cos - moveZ * sin;
+            this._cameraTarget.z += moveX * sin + moveZ * cos;
+        }
+
         // Space - Move up
         if (this._keysPressed.get("space")) {
             this._cameraTarget.y += this._moveSpeed;
